@@ -1,0 +1,8 @@
+[package]
+name = "supra-libp2p"
+version = "0.1.0"
+authors = ["Wim Looman <wim@nemo157.com>"]
+
+[dependencies]
+multihash = { path = "../multihash", features = ["generation", "validation", "sha2"] }
+multiaddr = { path = "../multiaddr" }
