@@ -2,9 +2,15 @@ use multihash::MultiHash;
 
 use key::RSAPubKey;
 
-pub struct PeerId {
-    hash: MultiHash,
-    key: RSAPubKey,
+#[derive(Debug)]
+pub enum PeerId {
+    Candidate {
+        hash: MultiHash,
+    },
+    Proven {
+        hash: MultiHash,
+        key: RSAPubKey,
+    }
 }
 
 impl PeerId {
@@ -13,16 +19,22 @@ impl PeerId {
             return Err(());
         }
 
-        Ok(PeerId {
+        Ok(PeerId::Proven {
             hash: hash,
             key: key,
         })
     }
 
     pub fn from_key(key: RSAPubKey) -> PeerId {
-        PeerId {
+        PeerId::Proven {
             hash: MultiHash::generate(key.to_bytes()),
             key: key,
+        }
+    }
+
+    pub fn from_hash(hash: MultiHash) -> PeerId {
+        PeerId::Candidate {
+            hash: hash,
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::fmt;
 use openssl::crypto::pkey::PKey;
 
 pub struct RSAPubKey {
@@ -31,5 +32,21 @@ impl RSAPrivKey {
 
     pub fn pub_key(&self) -> &RSAPubKey {
         &self.pub_key
+    }
+}
+
+impl fmt::Debug for RSAPubKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("RSAPubKey")
+            .field("key", &self.key.get_rsa())
+            .finish()
+    }
+}
+
+impl fmt::Debug for RSAPrivKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("RSAPrivKey")
+            .field("key", &self.key.get_rsa())
+            .finish()
     }
 }

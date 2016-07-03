@@ -2,6 +2,7 @@ use multihash::MultiHash;
 
 use key::RSAPrivKey;
 
+#[derive(Debug)]
 pub struct HostId {
     hash: MultiHash,
     key: RSAPrivKey,
