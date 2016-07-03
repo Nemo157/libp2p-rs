@@ -1,6 +1,7 @@
-use peer::Peer;
+use std::io;
 
 use { PeerInfo, Transport };
+use peer::Peer;
 
 #[derive(Debug)]
 pub struct Swarm {
@@ -37,8 +38,8 @@ impl Swarm {
         self.peers.extend(peers.into_iter().map(Peer::new));
     }
 
-    pub fn connect_all(&mut self) -> Vec<Result<(), ()>> {
+    pub fn pre_connect_all(&mut self) -> Vec<io::Result<()>> {
         let transports = &mut self.transports;
-        self.peers.iter_mut().map(|peer| peer.connect(transports)).collect()
+        self.peers.iter_mut().map(|peer| peer.pre_connect(transports)).collect()
     }
 }

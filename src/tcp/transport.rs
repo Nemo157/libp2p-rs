@@ -1,7 +1,7 @@
+use std::io;
 use multiaddr::{ MultiAddr, Segment };
 
 use { Connection, Transport };
-
 use tcp::TcpConnection;
 
 #[derive(Debug)]
@@ -28,10 +28,10 @@ impl Transport for TcpTransport {
         }
     }
 
-    fn connect(&mut self, addr: &MultiAddr) -> Result<Box<Connection>, ()> {
+    fn connect(&mut self, addr: &MultiAddr) -> io::Result<Box<Connection>> {
         let segments = addr.segments();
         if segments.len() != 2 {
-            return Err(());
+            return Err(io::Error::new(io::ErrorKind::Other, "Invalid address"));
         }
 
         Ok(Box::new(match (segments[0].clone(), segments[1].clone()) {
@@ -42,7 +42,7 @@ impl Transport for TcpTransport {
                 try!(TcpConnection::connect((addr, port)))
             }
             _ => {
-                return Err(());
+                return Err(io::Error::new(io::ErrorKind::Other, "Invalid address"));
             }
         }))
     }

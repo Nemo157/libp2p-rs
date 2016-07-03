@@ -1,5 +1,6 @@
 extern crate multiaddr;
 extern crate multihash;
+extern crate multistream;
 extern crate openssl;
 
 mod connection;
