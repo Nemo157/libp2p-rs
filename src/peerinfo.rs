@@ -28,4 +28,8 @@ impl PeerInfo {
             Err(())
         }
     }
+
+    pub fn addrs(&self) -> &[MultiAddr] {
+        &self.addresses
+    }
 }

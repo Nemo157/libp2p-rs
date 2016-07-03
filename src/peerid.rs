@@ -4,6 +4,7 @@ use key::RSAPubKey;
 
 #[derive(Debug)]
 pub enum PeerId {
+    Unknown,
     Candidate {
         hash: MultiHash,
     },
