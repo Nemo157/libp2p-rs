@@ -1,32 +1,32 @@
 use multihash::MultiHash;
 
-pub type RSAPubKey = (); // TODO: Sort out a real key type
-pub type RSAPrivKey = (); // TODO: Sort out a real key type
+use key::RSAPrivKey;
 
 pub struct HostId {
     hash: MultiHash,
-    pub_key: RSAPubKey,
-    priv_key: RSAPrivKey,
+    key: RSAPrivKey,
 }
 
 impl HostId {
-    pub fn new(hash: MultiHash, pub_key: RSAPubKey, priv_key: RSAPrivKey) -> Result<HostId, ()> {
-        if Some(Ok(true)) != hash.validate(&[] /* pub_key.as_bytes() */) {
+    pub fn new(hash: MultiHash, key: RSAPrivKey) -> Result<HostId, ()> {
+        if Some(Ok(true)) != hash.validate(key.pub_key().to_bytes()) {
             return Err(());
         }
 
         Ok(HostId {
             hash: hash,
-            pub_key: pub_key,
-            priv_key: priv_key,
+            key: key,
         })
     }
 
-    pub fn from_keys(pub_key: RSAPubKey, priv_key: RSAPrivKey) -> HostId {
+    pub fn generate() -> HostId {
+        HostId::from_key(RSAPrivKey::generate())
+    }
+
+    pub fn from_key(key: RSAPrivKey) -> HostId {
         HostId {
-            hash: MultiHash::generate(&[] /* pub_key.as_bytes() */),
-            pub_key: pub_key,
-            priv_key: priv_key,
+            hash: MultiHash::generate(key.pub_key().to_bytes()),
+            key: key,
         }
     }
 }

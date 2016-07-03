@@ -1,6 +1,8 @@
 extern crate multiaddr;
 extern crate multihash;
+extern crate openssl;
 
+mod key;
 mod hostid;
 mod peerid;
 mod peerinfo;

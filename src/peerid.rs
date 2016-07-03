@@ -1,6 +1,6 @@
 use multihash::MultiHash;
 
-pub type RSAPubKey = (); // TODO: Sort out a real key type
+use key::RSAPubKey;
 
 pub struct PeerId {
     hash: MultiHash,
@@ -9,7 +9,7 @@ pub struct PeerId {
 
 impl PeerId {
     pub fn new(hash: MultiHash, key: RSAPubKey) -> Result<PeerId, ()> {
-        if Some(Ok(true)) != hash.validate(&[] /* key.as_bytes() */) {
+        if Some(Ok(true)) != hash.validate(key.to_bytes()) {
             return Err(());
         }
 
@@ -21,7 +21,7 @@ impl PeerId {
 
     pub fn from_key(key: RSAPubKey) -> PeerId {
         PeerId {
-            hash: MultiHash::generate(&[] /* key.as_bytes() */),
+            hash: MultiHash::generate(key.to_bytes()),
             key: key,
         }
     }
