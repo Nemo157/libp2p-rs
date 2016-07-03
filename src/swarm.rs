@@ -13,8 +13,8 @@ impl Swarm {
         Swarm { peers: Vec::new(), transports: Vec::new() }
     }
 
-    pub fn add_transport(&mut self, transport: Box<Transport>) {
-        self.transports.push(transport);
+    pub fn add_transport<T: 'static>(&mut self, transport: T) where T: Transport {
+        self.transports.push(Box::new(transport));
     }
 
     pub fn add_transports<I, T>(&mut self, transports: T)

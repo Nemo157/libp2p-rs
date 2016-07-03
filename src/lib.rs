@@ -9,6 +9,7 @@ mod peer;
 mod peerid;
 mod peerinfo;
 mod swarm;
+pub mod tcp;
 mod transport;
 
 pub use hostid::HostId;
