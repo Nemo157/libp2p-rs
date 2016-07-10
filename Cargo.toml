@@ -4,7 +4,9 @@ version = "0.1.0"
 authors = ["Wim Looman <wim@nemo157.com>"]
 
 [dependencies]
-multihash = { path = "../multihash", features = ["generation", "validation", "sha2"] }
+libp2p-identity = { path = "../libp2p-identity" }
+libp2p-secio = { path = "../libp2p-secio" }
 multiaddr = { path = "../multiaddr" }
+multihash = { path = "../multihash", features = ["generation", "validation", "sha2"] }
 multistream = { path = "../multistream" }
 openssl = "*"

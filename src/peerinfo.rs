@@ -1,5 +1,5 @@
 use multiaddr::{ MultiAddr, Segment };
-use peerid::PeerId;
+use identity::PeerId;
 
 #[derive(Debug)]
 pub struct PeerInfo {
@@ -31,5 +31,9 @@ impl PeerInfo {
 
     pub fn addrs(&self) -> &[MultiAddr] {
         &self.addresses
+    }
+
+    pub fn id(&self) -> &PeerId {
+        &self.id
     }
 }
