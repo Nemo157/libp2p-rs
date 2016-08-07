@@ -7,13 +7,19 @@ use peer::Peer;
 #[derive(Debug)]
 pub struct Swarm {
     id: HostId,
+    allow_unencrypted: bool,
     peers: Vec<Peer>,
     transports: Vec<Box<Transport>>,
 }
 
 impl Swarm {
-    pub fn new(id: HostId) -> Swarm {
-        Swarm { id: id, peers: Vec::new(), transports: Vec::new() }
+    pub fn new(id: HostId, allow_unencrypted: bool) -> Swarm {
+        Swarm {
+            id: id,
+            allow_unencrypted: allow_unencrypted,
+            peers: Vec::new(),
+            transports: Vec::new()
+        }
     }
 
     pub fn add_transport<T: 'static>(&mut self, transport: T) where T: Transport {
@@ -29,7 +35,7 @@ impl Swarm {
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) {
-        self.peers.push(Peer::new(info));
+        self.peers.push(Peer::new(info, self.allow_unencrypted));
     }
 
     pub fn add_peers<I, T>(&mut self, peers: T)
@@ -37,7 +43,8 @@ impl Swarm {
             I: Iterator<Item=PeerInfo>,
             T: IntoIterator<Item=PeerInfo, IntoIter=I>
     {
-        self.peers.extend(peers.into_iter().map(Peer::new));
+        let allow_unencrypted = self.allow_unencrypted;
+        self.peers.extend(peers.into_iter().map(|info| Peer::new(info, allow_unencrypted)));
     }
 
     pub fn pre_connect_all(&mut self) -> Vec<io::Result<()>> {

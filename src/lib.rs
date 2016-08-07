@@ -4,6 +4,7 @@ extern crate multiaddr;
 extern crate multihash;
 extern crate multistream;
 extern crate openssl;
+extern crate msgio;
 
 mod connection;
 mod peer;
