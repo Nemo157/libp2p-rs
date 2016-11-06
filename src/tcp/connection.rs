@@ -1,6 +1,6 @@
 use std::{ io, net };
 
-use { Connection, Transport };
+use Connection;
 
 #[derive(Debug)]
 pub struct TcpConnection {

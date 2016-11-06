@@ -1,4 +1,5 @@
-use multiaddr::{ MultiAddr, Segment };
+use std::convert::TryInto;
+use maddr::{ MultiAddr, Segment };
 use identity::PeerId;
 
 #[derive(Debug)]
@@ -21,7 +22,7 @@ impl PeerInfo {
     pub fn from_addr(addr: MultiAddr) -> Result<PeerInfo, ()> {
         if let Some((addr, Segment::Ipfs(hash))) = addr.split_off_last() {
             Ok(PeerInfo {
-                id: PeerId::from_hash(hash),
+                id: PeerId::from_hash(try!(hash.try_into())),
                 addresses: vec![addr],
             })
         } else {

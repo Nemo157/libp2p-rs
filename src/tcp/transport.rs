@@ -1,5 +1,5 @@
 use std::io;
-use multiaddr::{ MultiAddr, Segment };
+use maddr::{ MultiAddr, Segment };
 
 use { Connection, Transport };
 use tcp::TcpConnection;

@@ -1,5 +1,5 @@
 use std::{ io, fmt };
-use multiaddr::MultiAddr;
+use maddr::MultiAddr;
 
 use { Connection };
 

@@ -1,7 +1,9 @@
+#![feature(try_from)]
+
 pub extern crate libp2p_identity as identity;
 extern crate libp2p_secio as secio;
-extern crate multiaddr;
-extern crate multihash;
+extern crate maddr;
+extern crate mhash;
 extern crate multistream;
 extern crate openssl;
 extern crate msgio;
