@@ -5,7 +5,7 @@ use identity::HostId;
 
 use msgio::{ ReadLpm, WriteLpm };
 
-use { PeerInfo, Transport };
+use { PeerInfo, transport };
 
 trait MessageStream: fmt::Debug + ReadLpm + WriteLpm {
 }
@@ -29,27 +29,23 @@ impl Peer {
         }
     }
 
-    pub fn pre_connect(&mut self, host: &HostId, transports: &mut [Box<Transport>]) -> io::Result<()> {
+    pub fn pre_connect(&mut self, host: &HostId) -> io::Result<()> {
         if let None = self.idle_connection {
             for addr in self.info.addrs() {
-                for transport in transports.iter_mut() {
-                    if transport.can_handle(addr) {
-                        let conn = transport.connect(addr).and_then(|conn| {
-                            let mut negotiator = Negotiator::start(conn)
-                                .negotiate(b"/secio/1.0.0", |conn| SecStream::new(conn, host, self.info.id()).map(|c| Box::new(c) as Box<MessageStream>));
-                            if self.allow_unencrypted {
-                                negotiator = negotiator.negotiate(b"/plaintext/1.0.0", |conn| Ok(Box::new(conn) as Box<MessageStream>));
-                            }
-                            negotiator.finish()
-                        });
-                        match conn {
-                            Ok(conn) => {
-                                self.idle_connection = Some(conn);
-                            }
-                            Err(error) => {
-                                println!("{}", error);
-                            }
-                        }
+                let conn = transport::connect(addr).and_then(|conn| {
+                    let mut negotiator = Negotiator::start(conn)
+                        .negotiate(b"/secio/1.0.0", |conn| SecStream::new(conn, host, self.info.id()).map(|c| Box::new(c) as Box<MessageStream>));
+                    if self.allow_unencrypted {
+                        negotiator = negotiator.negotiate(b"/plaintext/1.0.0", |conn| Ok(Box::new(conn) as Box<MessageStream>));
+                    }
+                    negotiator.finish()
+                });
+                match conn {
+                    Ok(conn) => {
+                        self.idle_connection = Some(conn);
+                    }
+                    Err(error) => {
+                        println!("{}", error);
                     }
                 }
             }

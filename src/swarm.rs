@@ -1,7 +1,7 @@
 use std::io;
 use identity::HostId;
 
-use { PeerInfo, Transport };
+use { PeerInfo };
 use peer::Peer;
 
 #[derive(Debug)]
@@ -9,7 +9,6 @@ pub struct Swarm {
     id: HostId,
     allow_unencrypted: bool,
     peers: Vec<Peer>,
-    transports: Vec<Box<Transport>>,
 }
 
 impl Swarm {
@@ -18,20 +17,7 @@ impl Swarm {
             id: id,
             allow_unencrypted: allow_unencrypted,
             peers: Vec::new(),
-            transports: Vec::new()
         }
-    }
-
-    pub fn add_transport<T: 'static>(&mut self, transport: T) where T: Transport {
-        self.transports.push(Box::new(transport));
-    }
-
-    pub fn add_transports<I, T>(&mut self, transports: T)
-        where
-            I: Iterator<Item=Box<Transport>>,
-            T: IntoIterator<Item=Box<Transport>, IntoIter=I>
-    {
-        self.transports.extend(transports.into_iter());
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) {
@@ -49,7 +35,6 @@ impl Swarm {
 
     pub fn pre_connect_all(&mut self) -> Vec<io::Result<()>> {
         let id = &self.id;
-        let transports = &mut self.transports;
-        self.peers.iter_mut().map(|peer| peer.pre_connect(id, transports)).collect()
+        self.peers.iter_mut().map(|peer| peer.pre_connect(id)).collect()
     }
 }
