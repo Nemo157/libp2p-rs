@@ -1,6 +1,9 @@
 use std::io;
 
 use maddr::MultiAddr;
+use tokio_core::io::Io;
+use tokio_core::reactor;
+use futures::{ future, Future };
 
 use tcp;
 
@@ -9,11 +12,11 @@ pub enum Transport {
     Tcp(tcp::Transport),
 }
 
-pub fn connect(addr: &MultiAddr) -> io::Result<Transport> {
+pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<Item=Transport, Error=io::Error> {
     if tcp::can_handle(addr) {
-        Ok(Transport::Tcp(tcp::connect(addr)?))
+        future::Either::A(tcp::connect(addr, event_loop).map(Transport::Tcp))
     } else {
-        Err(io::Error::new(io::ErrorKind::Other, "No transports can handle"))
+        future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "No transports can handle")))
     }
 }
 
@@ -61,4 +64,7 @@ impl io::Write for Transport {
             Transport::Tcp(ref mut transport) => transport.write_all(buf)
         }
     }
+}
+
+impl Io for Transport {
 }

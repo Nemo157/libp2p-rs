@@ -1,8 +1,13 @@
-use std::{ io, net };
+use std::io;
+use std::net::{ IpAddr, SocketAddr };
+
 use maddr::{ MultiAddr, Segment };
+use tokio_core::net::TcpStream;
+use tokio_core::reactor;
+use futures::{ future, Future };
 
 #[derive(Debug)]
-pub struct Transport(net::TcpStream);
+pub struct Transport(TcpStream);
 
 proxy_stream!(Transport, self.0);
 
@@ -18,21 +23,21 @@ pub fn can_handle(addr: &MultiAddr) -> bool {
     }
 }
 
-pub fn connect(addr: &MultiAddr) -> io::Result<Transport> {
+pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<Item=Transport, Error=io::Error> {
     let segments = addr.segments();
     if segments.len() != 2 {
-        return Err(io::Error::new(io::ErrorKind::Other, "Invalid address"));
+        return future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Invalid address")));
     }
 
-    Ok(match (&segments[0], &segments[1]) {
-        (&Segment::IP4(ref addr), &Segment::Tcp(ref port)) => {
-            Transport(net::TcpStream::connect((*addr, *port))?)
+    match (&segments[0], &segments[1]) {
+        (&Segment::IP4(addr), &Segment::Tcp(port)) => {
+            future::Either::A(TcpStream::connect(&SocketAddr::new(IpAddr::V4(addr), port), event_loop).map(Transport))
         }
-        (&Segment::IP6(ref addr), &Segment::Tcp(ref port)) => {
-            Transport(net::TcpStream::connect((*addr, *port))?)
+        (&Segment::IP6(addr), &Segment::Tcp(port)) => {
+            future::Either::A(TcpStream::connect(&SocketAddr::new(IpAddr::V6(addr), port), event_loop).map(Transport))
         }
         _ => {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid address"));
+            future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Invalid address")))
         }
-    })
+    }
 }

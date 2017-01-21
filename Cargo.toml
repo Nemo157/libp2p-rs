@@ -11,3 +11,5 @@ mhash = { version = "0.2.0", features = ["generation", "validation", "sha2"] }
 multistream = { path = "../multistream-rs" }
 msgio = { path = "../msgio-rs" }
 openssl = "*"
+futures = "*"
+tokio-core = "*"
