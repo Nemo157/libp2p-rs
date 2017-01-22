@@ -7,8 +7,8 @@ use secio::{ self, SecStream };
 use identity::HostId;
 use tokio_core::reactor;
 use futures::{ Future, Stream, Sink, Async, Poll };
-use futures::sync::mpsc;
 use tokio_core::io::{ Io, Framed };
+use tokio_city_actors::{ run_actor, Actor, ActorHandle };
 
 use msgio;
 
@@ -20,78 +20,52 @@ trait Transport: Stream<Item=Vec<u8>, Error=io::Error> + Sink<SinkItem=Vec<u8>, 
 impl<S> Transport for S where S: Stream<Item=Vec<u8>, Error=io::Error> + Sink<SinkItem=Vec<u8>, SinkError=io::Error> {
 }
 
-enum Msg {
+#[derive(Clone)]
+enum Request {
     PreConnect,
 }
 
-enum PeerState {
-    Waiting,
-    Connecting(Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>>, Vec<MultiAddr>),
-    Errored,
-}
-
-struct PeerLoop {
-    state: PeerState,
+struct PeerActor {
     host: HostId,
     info: PeerInfo,
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
-    receiver: mpsc::Receiver<Msg>,
     idle_connection: Option<SecStream<Framed<transport::Transport, msgio::Codec>>>,
+}
+
+enum PeerActorFuture {
+    Connecting(PeerActor, Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>>, Vec<MultiAddr>),
+    Done(PeerActor),
+    Errored,
 }
 
 #[derive(Clone)]
 pub struct Peer {
-    sender: mpsc::Sender<Msg>,
+    handle: ActorHandle<Request>,
 }
 
 impl Peer {
     pub fn new(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
-        let (sender, receiver) = mpsc::channel(1);
-        event_loop.spawn(PeerLoop {
-            state: PeerState::Waiting,
+        let handle = run_actor(&event_loop, PeerActor {
             host: host,
             info: info,
             allow_unencrypted: allow_unencrypted,
             event_loop: event_loop.clone(),
-            receiver: receiver,
             idle_connection: None,
         });
-        Peer { sender: sender }
+        Peer { handle: handle }
     }
 
-    fn send(&mut self, msg: Msg) -> impl Future<Item=(), Error=()> {
-        self.sender.clone()
-            .send(msg)
-            .map(|_| ())
-            .map_err(|err| { println!("error: {:?}", err); () })
+    fn send(&self, req: Request) -> impl Future<Item=(), Error=()> {
+        self.handle.call(req)
     }
 
     pub fn pre_connect(&mut self) -> impl Future<Item=(), Error=()> {
-        self.send(Msg::PreConnect)
+        self.send(Request::PreConnect)
     }
 }
 
-impl PeerLoop {
-    fn handle(&mut self, msg: Msg) -> PeerState {
-        match msg {
-            Msg::PreConnect => {
-                if self.idle_connection.is_some() {
-                    println!("Peer {:?} already connected", self.info.id());
-                    PeerState::Waiting
-                } else {
-                    let mut addrs = Vec::from_iter(self.info.addrs().iter().cloned());
-                    if let Some(addr) = addrs.pop() {
-                        let attempt = self.connect(&addr);
-                        PeerState::Connecting(attempt, addrs)
-                    } else {
-                        PeerState::Waiting
-                    }
-                }
-            }
-        }
-    }
-
+impl PeerActor {
     fn connect(&self, addr: &MultiAddr) -> Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>> {
         let host = self.host.clone();
         let peer_id = self.info.id().clone();
@@ -110,57 +84,65 @@ impl PeerLoop {
     }
 }
 
-impl Future for PeerLoop {
-    type Item = ();
+impl Actor for PeerActor {
+    type Request = Request;
     type Error = ();
+    type IntoFuture = PeerActorFuture;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match mem::replace(&mut self.state, PeerState::Errored) {
-            PeerState::Waiting => {
-                match self.receiver.poll() {
-                    Ok(Async::Ready(Some(msg))) => {
-                        self.state = self.handle(msg);
-                        self.poll()
-                    }
-                    Ok(Async::Ready(None)) => {
-                        self.state = PeerState::Waiting;
-                        Ok(Async::Ready(()))
-                    }
-                    Ok(Async::NotReady) => {
-                        self.state = PeerState::Waiting;
-                        Ok(Async::NotReady)
-                    }
-                    Err(err) => {
-                        println!("error: {:?}", err);
-                        Err(())
+    fn call(self, req: Self::Request) -> Self::IntoFuture {
+        match req {
+            Request::PreConnect => {
+                if self.idle_connection.is_some() {
+                    println!("Peer {:?} already connected", self.info.id());
+                    PeerActorFuture::Done(self)
+                } else {
+                    let mut addrs = Vec::from_iter(self.info.addrs().iter().cloned());
+                    if let Some(addr) = addrs.pop() {
+                        let attempt = self.connect(&addr);
+                        PeerActorFuture::Connecting(self, attempt, addrs)
+                    } else {
+                        PeerActorFuture::Done(self)
                     }
                 }
             }
-            PeerState::Connecting(mut attempt, mut addrs) => {
+        }
+    }
+}
+
+impl Future for PeerActorFuture {
+    type Item = PeerActor;
+    type Error = ();
+    
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match mem::replace(self, PeerActorFuture::Errored) {
+            PeerActorFuture::Connecting(mut state, mut attempt, mut addrs) => {
                 match attempt.poll() {
                     Ok(Async::Ready(conn)) => {
-                        self.idle_connection = Some(conn);
-                        self.state = PeerState::Waiting;
-                        self.poll()
+                        state.idle_connection = Some(conn);
+                        Ok(Async::Ready(state))
                     }
                     Ok(Async::NotReady) => {
-                        self.state = PeerState::Connecting(attempt, addrs);
+                        *self = PeerActorFuture::Connecting(state, attempt, addrs);
                         Ok(Async::NotReady)
                     }
                     Err(err) => {
-                        println!("error: {:?}", err);
+                        println!("Failed to connect: {:?}", err);
                         if let Some(addr) = addrs.pop() {
-                            self.state = PeerState::Connecting(self.connect(&addr), addrs);
+                            let attempt = state.connect(&addr);
+                            *self = PeerActorFuture::Connecting(state, attempt, addrs);
+                            self.poll()
                         } else {
                             println!("Failed to connect to all addresses");
-                            self.state = PeerState::Waiting;
+                            Ok(Async::Ready(state))
                         }
-                        self.poll()
                     }
                 }
             }
-            PeerState::Errored => {
+            PeerActorFuture::Errored => {
                 Err(())
+            }
+            PeerActorFuture::Done(state) => {
+                Ok(Async::Ready(state))
             }
         }
     }

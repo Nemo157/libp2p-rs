@@ -13,3 +13,5 @@ msgio = { path = "../msgio-rs" }
 openssl = "*"
 futures = "*"
 tokio-core = "*"
+futures-mpsc = "*"
+futures-spawn = "*"

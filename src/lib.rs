@@ -8,6 +8,8 @@ extern crate multistream;
 extern crate openssl;
 extern crate msgio;
 extern crate futures;
+extern crate futures_mpsc;
+extern crate futures_spawn;
 extern crate tokio_core;
 
 #[macro_use]
@@ -18,6 +20,7 @@ mod peerinfo;
 mod swarm;
 pub mod tcp;
 mod transport;
+mod tokio_city_actors;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;
