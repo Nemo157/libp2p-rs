@@ -41,11 +41,11 @@ enum PeerActorFuture {
 
 #[derive(Clone)]
 pub struct Peer {
-    handle: ActorHandle<Request>,
+    handle: ActorHandle<PeerActor>,
 }
 
 pub struct PreConnectResult {
-    inner: ActorCallResult<Request>,
+    inner: ActorCallResult<PeerActor>,
 }
 
 impl Peer {
@@ -86,6 +86,7 @@ impl PeerActor {
 
 impl Actor for PeerActor {
     type Request = Request;
+    type Response = ();
     type Error = ();
     type IntoFuture = PeerActorFuture;
 
@@ -110,7 +111,7 @@ impl Actor for PeerActor {
 }
 
 impl Future for PeerActorFuture {
-    type Item = PeerActor;
+    type Item = (PeerActor, ());
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -119,7 +120,7 @@ impl Future for PeerActorFuture {
                 match attempt.poll() {
                     Ok(Async::Ready(conn)) => {
                         state.idle_connection = Some(conn);
-                        Ok(Async::Ready(state))
+                        Ok(Async::Ready((state, ())))
                     }
                     Ok(Async::NotReady) => {
                         *self = PeerActorFuture::Connecting(state, attempt, addrs);
@@ -133,7 +134,7 @@ impl Future for PeerActorFuture {
                             self.poll()
                         } else {
                             println!("Failed to connect to all addresses");
-                            Ok(Async::Ready(state))
+                            Ok(Async::Ready((state, ())))
                         }
                     }
                 }
@@ -142,7 +143,7 @@ impl Future for PeerActorFuture {
                 Err(())
             }
             PeerActorFuture::Done(state) => {
-                Ok(Async::Ready(state))
+                Ok(Async::Ready((state, ())))
             }
         }
     }
@@ -153,6 +154,6 @@ impl Future for PreConnectResult {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll()
+        self.inner.poll().map_err(|err| println!("err: {:?}", err))
     }
 }

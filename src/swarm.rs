@@ -3,7 +3,7 @@ use std::mem;
 use futures::{ future, Future, Async, Poll };
 use tokio_core::reactor;
 use identity::HostId;
-use tokio_city_actors::{ run_actor, Actor, ActorHandle };
+use tokio_city_actors::{ run_actor, Actor, ActorHandle, ActorCallError };
 
 use { PeerInfo };
 use peer::{ Peer, PreConnectResult };
@@ -29,7 +29,7 @@ enum SwarmActorFuture {
 
 #[derive(Clone)]
 pub struct Swarm {
-    handle: ActorHandle<Request>,
+    handle: ActorHandle<SwarmActor>,
 }
 
 impl Swarm {
@@ -44,7 +44,8 @@ impl Swarm {
     }
 
     fn send(&mut self, req: Request) -> impl Future<Item=(), Error=()> {
-        self.handle.call(req)
+        fn log(err: ActorCallError<SwarmActor>) { println!("err: {:?}", err) }
+        self.handle.call(req).map_err(log)
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) -> impl Future<Item=(), Error=()> {
@@ -62,6 +63,7 @@ impl Swarm {
 
 impl Actor for SwarmActor {
     type Request = Request;
+    type Response = ();
     type Error = ();
     type IntoFuture = SwarmActorFuture;
 
@@ -90,7 +92,7 @@ impl Actor for SwarmActor {
 }
 
 impl Future for SwarmActorFuture {
-    type Item = SwarmActor;
+    type Item = (SwarmActor, ());
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -98,7 +100,7 @@ impl Future for SwarmActorFuture {
             SwarmActorFuture::Connecting(swarm, mut waiting) => {
                 match waiting.poll() {
                     Ok(Async::Ready(_)) => {
-                        Ok(Async::Ready(swarm))
+                        Ok(Async::Ready((swarm, ())))
                     }
                     Ok(Async::NotReady) => {
                         *self = SwarmActorFuture::Connecting(swarm, waiting);
@@ -106,7 +108,7 @@ impl Future for SwarmActorFuture {
                     }
                     Err(err) => {
                         println!("Failed to connect: {:?}", err);
-                        Ok(Async::Ready(swarm))
+                        Ok(Async::Ready((swarm, ())))
                     }
                 }
             }
@@ -114,7 +116,7 @@ impl Future for SwarmActorFuture {
                 Err(())
             }
             SwarmActorFuture::Done(state) => {
-                Ok(Async::Ready(state))
+                Ok(Async::Ready((state, ())))
             }
         }
     }
