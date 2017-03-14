@@ -1,62 +1,121 @@
-use futures::{ future, Future, Stream, Sink };
-use futures::sync::mpsc;
+use std::mem;
+
+use futures::{ future, Future, Async, Poll };
 use tokio_core::reactor;
 use identity::HostId;
+use tokio_city_actors::{ run_actor, Actor, ActorHandle };
 
 use { PeerInfo };
-use peer::Peer;
+use peer::{ Peer, PreConnectResult };
 
-enum Msg {
+enum Request {
     AddPeer(PeerInfo),
     AddPeers(Vec<PeerInfo>),
     PreConnectAll,
 }
 
+struct SwarmActor {
+    id: HostId,
+    allow_unencrypted: bool,
+    event_loop: reactor::Handle,
+    peers: Vec<Peer>,
+}
+
+enum SwarmActorFuture {
+    Connecting(SwarmActor, future::JoinAll<Vec<PreConnectResult>>),
+    Done(SwarmActor),
+    Errored,
+}
+
 #[derive(Clone)]
 pub struct Swarm {
-    sender: mpsc::Sender<Msg>,
+    handle: ActorHandle<Request>,
 }
 
 impl Swarm {
     pub fn new(id: HostId, allow_unencrypted: bool, event_loop: reactor::Handle) -> Swarm {
-        let (sender, receiver) = mpsc::channel(1);
-        let mut peers = Vec::new();
-        event_loop.clone().spawn(receiver.and_then(move |msg| match msg {
-            Msg::AddPeer(info) => {
-                println!("Adding peer {:?}", info);
-                peers.push(Peer::new(id.clone(), info, allow_unencrypted, event_loop.clone()));
-                Box::new(future::ok(())) as Box<Future<Item=(), Error=()>>
-            }
-            Msg::AddPeers(infos) => {
-                println!("Adding peers {:?}", infos);
-                peers.extend(infos.into_iter().map(|info| Peer::new(id.clone(), info, allow_unencrypted, event_loop.clone())));
-                Box::new(future::ok(())) as Box<Future<Item=(), Error=()>>
-            }
-            Msg::PreConnectAll => {
-                println!("Pre connecting peers");
-                Box::new(future::join_all(peers.iter_mut().map(|peer| peer.pre_connect()).collect::<Vec<_>>())
-                    .map(|_| ())) as Box<Future<Item=(), Error=()>>
-            }
-        }).for_each(|_| Ok(())));
-        Swarm { sender: sender }
+        let actor = SwarmActor {
+            id: id,
+            allow_unencrypted: allow_unencrypted,
+            event_loop: event_loop.clone(),
+            peers: Vec::new(),
+        };
+        Swarm { handle: run_actor(&event_loop, actor) }
     }
 
-    fn send(&mut self, msg: Msg) -> impl Future<Item=(), Error=()> {
-        self.sender.clone()
-            .send(msg)
-            .map(|_| ())
-            .map_err(|_| ())
+    fn send(&mut self, req: Request) -> impl Future<Item=(), Error=()> {
+        self.handle.call(req)
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) -> impl Future<Item=(), Error=()> {
-        self.send(Msg::AddPeer(info))
+        self.send(Request::AddPeer(info))
     }
 
     pub fn add_peers(&mut self, infos: Vec<PeerInfo>) -> impl Future<Item=(), Error=()> {
-        self.send(Msg::AddPeers(infos))
+        self.send(Request::AddPeers(infos))
     }
 
     pub fn pre_connect_all(&mut self) -> impl Future<Item=(), Error=()> {
-        self.send(Msg::PreConnectAll)
+        self.send(Request::PreConnectAll)
+    }
+}
+
+impl Actor for SwarmActor {
+    type Request = Request;
+    type Error = ();
+    type IntoFuture = SwarmActorFuture;
+
+    fn call(mut self, req: Self::Request) -> Self::IntoFuture {
+        match req {
+            Request::AddPeer(info) => {
+                println!("Adding peer {:?}", info);
+                self.peers.push(Peer::new(self.id.clone(), info, self.allow_unencrypted, self.event_loop.clone()));
+                SwarmActorFuture::Done(self)
+            }
+            Request::AddPeers(infos) => {
+                println!("Adding peers {:?}", infos);
+                let id = self.id.clone();
+                let allow_unencrypted = self.allow_unencrypted;
+                let event_loop = self.event_loop.clone();
+                self.peers.extend(infos.into_iter().map(|info| Peer::new(id.clone(), info, allow_unencrypted, event_loop.clone())));
+                SwarmActorFuture::Done(self)
+            }
+            Request::PreConnectAll => {
+                println!("Pre connecting peers");
+                let waiting = future::join_all(self.peers.iter_mut().map(|peer| peer.pre_connect()).collect::<Vec<_>>());
+                SwarmActorFuture::Connecting(self, waiting)
+            }
+        }
+    }
+}
+
+impl Future for SwarmActorFuture {
+    type Item = SwarmActor;
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match mem::replace(self, SwarmActorFuture::Errored) {
+            SwarmActorFuture::Connecting(swarm, mut waiting) => {
+                match waiting.poll() {
+                    Ok(Async::Ready(_)) => {
+                        Ok(Async::Ready(swarm))
+                    }
+                    Ok(Async::NotReady) => {
+                        *self = SwarmActorFuture::Connecting(swarm, waiting);
+                        Ok(Async::NotReady)
+                    }
+                    Err(err) => {
+                        println!("Failed to connect: {:?}", err);
+                        Ok(Async::Ready(swarm))
+                    }
+                }
+            }
+            SwarmActorFuture::Errored => {
+                Err(())
+            }
+            SwarmActorFuture::Done(state) => {
+                Ok(Async::Ready(state))
+            }
+        }
     }
 }

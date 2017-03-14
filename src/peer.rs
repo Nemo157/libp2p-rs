@@ -8,7 +8,7 @@ use identity::HostId;
 use tokio_core::reactor;
 use futures::{ Future, Stream, Sink, Async, Poll };
 use tokio_core::io::{ Io, Framed };
-use tokio_city_actors::{ run_actor, Actor, ActorHandle };
+use tokio_city_actors::{ run_actor, Actor, ActorHandle, ActorCallResult };
 
 use msgio;
 
@@ -44,6 +44,10 @@ pub struct Peer {
     handle: ActorHandle<Request>,
 }
 
+pub struct PreConnectResult {
+    inner: ActorCallResult<Request>,
+}
+
 impl Peer {
     pub fn new(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
         let handle = run_actor(&event_loop, PeerActor {
@@ -56,12 +60,8 @@ impl Peer {
         Peer { handle: handle }
     }
 
-    fn send(&self, req: Request) -> impl Future<Item=(), Error=()> {
-        self.handle.call(req)
-    }
-
-    pub fn pre_connect(&mut self) -> impl Future<Item=(), Error=()> {
-        self.send(Request::PreConnect)
+    pub fn pre_connect(&mut self) -> PreConnectResult {
+        PreConnectResult { inner: self.handle.call(Request::PreConnect) }
     }
 }
 
@@ -112,7 +112,7 @@ impl Actor for PeerActor {
 impl Future for PeerActorFuture {
     type Item = PeerActor;
     type Error = ();
-    
+
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match mem::replace(self, PeerActorFuture::Errored) {
             PeerActorFuture::Connecting(mut state, mut attempt, mut addrs) => {
@@ -145,5 +145,14 @@ impl Future for PeerActorFuture {
                 Ok(Async::Ready(state))
             }
         }
+    }
+}
+
+impl Future for PreConnectResult {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        self.inner.poll()
     }
 }

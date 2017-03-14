@@ -2,7 +2,7 @@ use std::mem;
 
 use futures_mpsc as mpsc;
 use futures_spawn::Spawn;
-use futures::{ IntoFuture, Future, Poll, Async, Stream, Sink };
+use futures::{ IntoFuture, future, Future, Poll, Async, Stream, sink, Sink };
 
 pub trait Actor: Sized {
     type Request;
@@ -23,9 +23,12 @@ pub struct ActorBox<A> where A: Actor {
     rx: mpsc::Receiver<A::Request>,
 }
 
-#[derive(Clone)]
 pub struct ActorHandle<R> {
     tx: mpsc::Sender<R>,
+}
+
+pub struct ActorCallResult<R> {
+    inner: future::MapErr<future::Map<sink::Send<mpsc::Sender<R>>, fn(mpsc::Sender<R>)>, fn(mpsc::SendError<R>)>,
 }
 
 pub fn run_actor<A, S>(spawn: &S, actor: A) -> ActorHandle<A::Request> where A: Actor, S: Spawn<ActorBox<A>> {
@@ -38,11 +41,16 @@ pub fn run_actor<A, S>(spawn: &S, actor: A) -> ActorHandle<A::Request> where A: 
 }
 
 impl<R> ActorHandle<R> {
-    pub fn call(&self, msg: R) -> impl Future<Item=(), Error=()> {
-        self.tx.clone()
+    pub fn call(&self, msg: R) -> ActorCallResult<R> {
+        fn ignore<T>(_: T) {}
+        fn log<R>(err: mpsc::SendError<R>) {
+             println!("error: {:?}", err);
+        }
+        let result = self.tx.clone()
             .send(msg)
-            .map(|_| ())
-            .map_err(|err| { println!("error: {:?}", err); () })
+            .map(ignore as _)
+            .map_err(log as _);
+        ActorCallResult { inner: result }
     }
 }
 
@@ -92,5 +100,20 @@ impl<A> Future for ActorBox<A> where A: Actor {
                 Err(())
             }
         }
+    }
+}
+
+impl<R> Future for ActorCallResult<R> {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        self.inner.poll()
+    }
+}
+
+impl<R> Clone for ActorHandle<R> {
+    fn clone(&self) -> Self {
+        ActorHandle { tx: self.tx.clone() }
     }
 }
