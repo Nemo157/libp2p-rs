@@ -10,7 +10,6 @@ use identity::HostId;
 use tokio_core::reactor;
 use futures::{ Future, Stream, Sink, Async, Poll };
 use tokio_core::io::{ Io, Framed };
-use tokio_city_actors as actors;
 
 use msgio;
 
@@ -21,8 +20,6 @@ trait Transport: Stream<Item=Vec<u8>, Error=io::Error> + Sink<SinkItem=Vec<u8>, 
 
 impl<S> Transport for S where S: Stream<Item=Vec<u8>, Error=io::Error> + Sink<SinkItem=Vec<u8>, SinkError=io::Error> {
 }
-
-struct PreConnect;
 
 struct State {
     host: HostId,
@@ -37,29 +34,44 @@ pub enum PreConnectFuture {
     Done,
 }
 
-#[derive(Clone)]
-pub struct Peer {
-    handle: actors::Handle<State>,
+pub struct Peer(Rc<State>);
+
+impl Clone for Peer {
+    fn clone(&self) -> Self { Peer(self.0.clone()) }
 }
 
 impl Peer {
     pub fn new(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
-        let handle = actors::spawn(State {
+        Peer(Rc::new(State {
             host: host,
             info: info,
             allow_unencrypted: allow_unencrypted,
             event_loop: event_loop.clone(),
             idle_connection: RefCell::new(None),
-        });
-        Peer { handle: handle }
+        }))
     }
 
     pub fn pre_connect(&mut self) -> PreConnectFuture {
-        self.handle.run(PreConnect)
+        State::pre_connect(self.0.clone())
     }
 }
 
 impl State {
+    fn pre_connect(state: Rc<Self>) -> PreConnectFuture {
+        if state.idle_connection.borrow().is_some() {
+            println!("Peer {:?} already connected", state.info.id());
+            PreConnectFuture::Done
+        } else {
+            let mut addrs = Vec::from_iter(state.info.addrs().iter().cloned());
+            if let Some(addr) = addrs.pop() {
+                let attempt = state.connect(&addr);
+                PreConnectFuture::Connecting(state, attempt, addrs)
+            } else {
+                PreConnectFuture::Done
+            }
+        }
+    }
+
     fn connect(&self, addr: &MultiAddr) -> Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>> {
         let host = self.host.clone();
         let peer_id = self.info.id().clone();
@@ -75,26 +87,6 @@ impl State {
                 // }
                 negotiator.finish()
             }))
-    }
-}
-
-impl actors::Operation for PreConnect {
-    type State = State;
-    type IntoFuture = PreConnectFuture;
-
-    fn apply(self, state: Rc<State>) -> Self::IntoFuture {
-        if state.idle_connection.borrow().is_some() {
-            println!("Peer {:?} already connected", state.info.id());
-            PreConnectFuture::Done
-        } else {
-            let mut addrs = Vec::from_iter(state.info.addrs().iter().cloned());
-            if let Some(addr) = addrs.pop() {
-                let attempt = state.connect(&addr);
-                PreConnectFuture::Connecting(state, attempt, addrs)
-            } else {
-                PreConnectFuture::Done
-            }
-        }
     }
 }
 

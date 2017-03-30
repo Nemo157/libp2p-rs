@@ -21,7 +21,6 @@ mod peerinfo;
 mod swarm;
 pub mod tcp;
 mod transport;
-mod tokio_city_actors;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;
