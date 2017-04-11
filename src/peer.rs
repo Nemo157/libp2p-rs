@@ -29,8 +29,12 @@ struct State {
     idle_connection: RefCell<Option<SecStream<Framed<transport::Transport, msgio::Codec>>>>,
 }
 
-pub enum PreConnectFuture {
-    Connecting(Rc<State>, Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>>, Vec<MultiAddr>),
+enum PreConnectFuture {
+    Connecting {
+        state: Rc<State>,
+        attempt: Box<Future<Item=SecStream<Framed<transport::Transport, msgio::Codec>>, Error=io::Error>>,
+        addrs: Vec<MultiAddr>,
+    },
     Done,
 }
 
@@ -51,7 +55,7 @@ impl Peer {
         }))
     }
 
-    pub fn pre_connect(&mut self) -> PreConnectFuture {
+    pub fn pre_connect(&mut self) -> impl Future<Item=(), Error=()> {
         State::pre_connect(self.0.clone())
     }
 }
@@ -65,7 +69,11 @@ impl State {
             let mut addrs = Vec::from_iter(state.info.addrs().iter().cloned());
             if let Some(addr) = addrs.pop() {
                 let attempt = state.connect(&addr);
-                PreConnectFuture::Connecting(state, attempt, addrs)
+                PreConnectFuture::Connecting {
+                    state: state,
+                    attempt: attempt,
+                    addrs: addrs,
+                }
             } else {
                 PreConnectFuture::Done
             }
@@ -96,7 +104,7 @@ impl Future for PreConnectFuture {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
-            PreConnectFuture::Connecting(ref state, ref mut attempt, ref mut addrs) => {
+            PreConnectFuture::Connecting { ref state, ref mut attempt, ref mut addrs } => {
                 match attempt.poll() {
                     Ok(Async::Ready(conn)) => {
                         *state.idle_connection.borrow_mut() = Some(conn);
