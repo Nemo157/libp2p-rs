@@ -1,9 +1,11 @@
+use std::io;
 use std::rc::Rc;
 use std::cell::RefCell;
 
 use futures::{ future, Future };
 use tokio_core::reactor;
-use identity::HostId;
+use identity::{ HostId, PeerId };
+use mplex;
 
 use { PeerInfo };
 use peer::Peer;
@@ -53,5 +55,13 @@ impl Swarm {
         fn discard(_: Vec<()>) { }
         future::join_all(self.0.peers.borrow_mut().iter_mut().map(|peer| peer.pre_connect()).collect::<Vec<_>>())
             .map(discard as fn(Vec<()>) -> ())
+    }
+
+    pub fn open_stream(&mut self, id: PeerId, protocol: &str) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+        if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(peer.id())) {
+            future::Either::A(peer.open_stream(protocol))
+        } else {
+            future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, format!("Could not find peer {:?}", id))))
+        }
     }
 }

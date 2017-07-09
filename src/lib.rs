@@ -12,6 +12,7 @@ extern crate futures_mpsc;
 extern crate futures_spawn;
 extern crate tokio_core;
 extern crate relay;
+extern crate mplex;
 
 #[macro_use]
 mod macros;

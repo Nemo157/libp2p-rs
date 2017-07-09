@@ -10,6 +10,7 @@ maddr = "0.2.0"
 mhash = { version = "0.2.0", features = ["generation", "validation", "sha2"] }
 multistream = { path = "../multistream-rs" }
 msgio = { path = "../msgio-rs" }
+mplex = { path = "../mplex-rs" }
 openssl = "*"
 futures = "*"
 tokio-core = "*"
