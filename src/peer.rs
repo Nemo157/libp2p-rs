@@ -11,7 +11,7 @@ use tokio_core::reactor;
 use futures::{ future, Future, Poll };
 use tokio_core::io::{ Io, Framed };
 
-use msgio;
+use msgio::{self, MsgIo, MsgFramed};
 use mplex;
 
 use { PeerInfo, transport };
@@ -101,9 +101,9 @@ impl State {
     fn connect_mux(state: Rc<Self>) -> impl Future<Item=mplex::Multiplexer<SecStream<Framed<transport::Transport, msgio::Codec>>>, Error=io::Error> {
         State::connect_stream(state)
             .and_then(|conn| {
-                Negotiator::start(conn)
-                    .negotiate(b"/mplex/6.7.0", move |conn: SecStream<Framed<transport::Transport, msgio::Codec>>| -> Box<Future<Item=_, Error=_>> {
-                        Box::new(future::ok(mplex::Multiplexer::new(conn, true)))
+                Negotiator::start(conn.framed(msgio::Codec(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
+                    .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<SecStream<Framed<transport::Transport, msgio::Codec>>, msgio::Codec>| -> Box<Future<Item=_, Error=_>> {
+                        Box::new(future::ok(mplex::Multiplexer::new(framed.into_inner(), true)))
                     })
                     .finish()
             })
