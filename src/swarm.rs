@@ -58,7 +58,7 @@ impl Swarm {
     }
 
     pub fn open_stream(&mut self, id: PeerId, protocol: &str) -> impl Future<Item=mplex::Stream, Error=io::Error> {
-        if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(peer.id())) {
+        if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(&*peer.id())) {
             future::Either::A(peer.open_stream(protocol))
         } else {
             future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, format!("Could not find peer {:?}", id))))

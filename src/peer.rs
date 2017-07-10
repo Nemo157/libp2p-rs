@@ -1,14 +1,14 @@
 use std::io;
 use std::iter::FromIterator;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 
 use maddr::MultiAddr;
 use multistream::Negotiator;
 use secio::{ self, SecStream };
 use identity::{ HostId, PeerId };
 use tokio_core::reactor;
-use futures::{ future, Future, Poll };
+use futures::{ future, Async, Future, Poll };
 use tokio_core::io::{ Io, Framed };
 
 use msgio::{self, MsgIo, MsgFramed};
@@ -40,16 +40,16 @@ impl Clone for Peer {
 impl Peer {
     pub fn new(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
         Peer(Rc::new(State {
-            host: host,
-            info: info,
-            allow_unencrypted: allow_unencrypted,
+            host,
+            info,
+            allow_unencrypted,
             event_loop: event_loop.clone(),
             idle_connection: RefCell::new(None),
             mux: RefCell::new(None),
         }))
     }
 
-    pub fn id(&self) -> &PeerId {
+    pub fn id(&self) -> Ref<PeerId> {
         self.0.info.id()
     }
 
@@ -160,7 +160,15 @@ impl Future for ConnectFuture {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.attempt.poll() {
-            Ok(result) => Ok(result),
+            Ok(Async::Ready(stream)) => {
+                if !self.state.info.id().proven() {
+                    self.state.info.update_id(stream.peer().clone());
+                }
+                Ok(Async::Ready(stream))
+            }
+            Ok(Async::NotReady) => {
+                Ok(Async::NotReady)
+            }
             Err(err) => {
                 println!("Failed to connect: {:?}", err);
                 if let Some(addr) = self.addrs.pop() {

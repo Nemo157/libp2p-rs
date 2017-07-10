@@ -1,15 +1,17 @@
+use std::cell::{Ref, RefCell};
+
 use maddr::{ MultiAddr, Segment };
 use identity::PeerId;
 
 #[derive(Debug)]
 pub struct PeerInfo {
-    id: PeerId,
+    id: RefCell<PeerId>,
     addresses: Vec<MultiAddr>,
 }
 
 impl PeerInfo {
     pub fn new(id: PeerId) -> PeerInfo {
-        PeerInfo { id: id, addresses: Vec::new() }
+        PeerInfo { id: RefCell::new(id), addresses: Vec::new() }
     }
 
     /// addr should consist of `/<routing info>/ipfs/<peer id hash>`, e.g.
@@ -21,7 +23,7 @@ impl PeerInfo {
     pub fn from_addr(addr: MultiAddr) -> Result<PeerInfo, ()> {
         if let Some((addr, Segment::Ipfs(hash))) = addr.split_off_last() {
             Ok(PeerInfo {
-                id: PeerId::from_hash(hash),
+                id: RefCell::new(PeerId::from_hash(hash)),
                 addresses: vec![addr],
             })
         } else {
@@ -33,7 +35,17 @@ impl PeerInfo {
         &self.addresses
     }
 
-    pub fn id(&self) -> &PeerId {
-        &self.id
+    pub fn id(&self) -> Ref<PeerId> {
+        self.id.borrow()
+    }
+
+    /// Allow updating this peer's id with a proven id once we obtain their
+    /// public key
+    // TODO: Should store public keys somewhere centralized once we acquire them
+    pub fn update_id(&self, id: PeerId) {
+        if !self.id().matches(&id) {
+            panic!("Attempted to update peer info with different id, expected proven id for {:?} got {:?}", self.id, id);
+        }
+        *self.id.borrow_mut() = id;
     }
 }
