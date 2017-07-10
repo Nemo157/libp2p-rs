@@ -8,7 +8,8 @@ use multistream::Negotiator;
 use secio::{ self, SecStream };
 use identity::{ HostId, PeerId };
 use tokio_core::reactor;
-use futures::{ future, Async, Future, Poll };
+use futures::{ future, task, Async, Future, Poll };
+use futures::task::Task;
 use tokio_core::io::{ Io, Framed };
 
 use msgio::{self, MsgIo, MsgFramed};
@@ -23,6 +24,7 @@ struct State {
     event_loop: reactor::Handle,
     idle_connection: RefCell<Option<SecStream<Framed<transport::Transport, msgio::Codec>>>>,
     mux: RefCell<Option<mplex::Multiplexer<SecStream<Framed<transport::Transport, msgio::Codec>>>>>,
+    task: RefCell<Option<Task>>,
 }
 
 struct ConnectFuture {
@@ -46,6 +48,7 @@ impl Peer {
             event_loop: event_loop.clone(),
             idle_connection: RefCell::new(None),
             mux: RefCell::new(None),
+            task: RefCell::new(None),
         }))
     }
 
@@ -57,8 +60,27 @@ impl Peer {
         State::pre_connect(self.0.clone())
     }
 
-    pub fn open_stream(&mut self, protocol: &str) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    pub fn open_stream(&mut self, protocol: &'static [u8]) -> impl Future<Item=mplex::Stream, Error=io::Error> {
         State::open_stream(self.0.clone(), protocol)
+    }
+}
+
+impl Future for Peer {
+    type Item = ();
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Some(ref mut stream) = *self.0.idle_connection.borrow_mut() {
+            // TODO: check if the stream is closed?
+        }
+        if let Some(ref mut mux) = *self.0.mux.borrow_mut() {
+            mux.poll()?;
+        }
+        let mut my_task = self.0.task.borrow_mut();
+        if my_task.is_none() {
+            *my_task = Some(task::current());
+        }
+        Ok(Async::NotReady)
     }
 }
 
@@ -117,17 +139,26 @@ impl State {
             println!("Peer {:?} needs muxing", state.info.id());
             future::Either::B(State::connect_mux(state.clone()).map(move |mux| {
                 *state.mux.borrow_mut() = Some(mux);
+                if let Some(ref task) = *state.task.borrow() {
+                    task.notify();
+                }
                 state
             }))
         }
     }
 
-    fn open_stream(state: Rc<Self>, protocol: &str) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    fn open_stream(state: Rc<Self>, protocol: &'static [u8]) -> impl Future<Item=mplex::Stream, Error=io::Error> {
         State::ensure_mux(state)
-            .and_then(|state| {
+            .and_then(move |state| {
                 if let Some(ref mut mux) = *state.mux.borrow_mut() {
                     mux.new_stream()
-                    // TODO: protocol?
+                        .and_then(move |stream| {
+                            Negotiator::start(stream.framed(msgio::Codec(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
+                                .negotiate(protocol, move |framed: MsgFramed<mplex::Stream, msgio::Codec>| -> Box<Future<Item=_,Error=_> + 'static> {
+                                    Box::new(future::ok(framed.into_inner()))
+                                })
+                                .finish()
+                        })
                 } else {
                     // TODO: Needed to avoid linker errors
                     // panic!("TODO: Should not get here");
