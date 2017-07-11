@@ -2,10 +2,12 @@ use std::io;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use futures::{ future, Future, Poll, Async };
+use futures::{ future, Future, Poll, Async, Sink, Stream };
 use tokio_core::reactor;
 use identity::{ HostId, PeerId };
 use mplex;
+use multistream::Negotiator;
+use msgio::{self, MsgIo, MsgFramed};
 
 use { PeerInfo };
 use peer::Peer;
@@ -15,12 +17,18 @@ struct State {
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
     peers: RefCell<Vec<Peer>>,
+    accepting: RefCell<Vec<Box<Future<Item=(), Error=io::Error> + 'static>>>,
 }
 
 pub struct Swarm(Rc<State>);
 
 impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
+}
+
+fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=(), Error=io::Error> {
+    // TODO: accept negotiation from peer
+    future::ok(())
 }
 
 impl Swarm {
@@ -30,6 +38,7 @@ impl Swarm {
             allow_unencrypted: allow_unencrypted,
             event_loop: event_loop.clone(),
             peers: RefCell::new(Vec::new()),
+            accepting: RefCell::new(Vec::new()),
         }))
     }
 
@@ -71,9 +80,30 @@ impl Future for Swarm {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let mut accepting = self.0.accepting.borrow_mut();
+
         for mut peer in self.0.peers.borrow().clone() {
-            peer.poll()?;
+            while let Async::Ready(Some(stream)) = peer.poll()? {
+                accepting.push(Box::new(accept_stream(stream, &peer)));
+            }
         }
+
+        let mut i = 0;
+        while i < accepting.len() {
+            match accepting[i].poll() {
+                Ok(Async::Ready(())) => {
+                    accepting.swap_remove(i);
+                }
+                Ok(Async::NotReady) => {
+                    i += 1;
+                }
+                Err(err) => {
+                    println!("Error while accepting peers stream: {:?}", err);
+                    accepting.swap_remove(i);
+                }
+            }
+        }
+
         Ok(Async::NotReady)
     }
 }

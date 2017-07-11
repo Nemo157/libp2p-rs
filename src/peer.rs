@@ -8,7 +8,7 @@ use multistream::Negotiator;
 use secio::{ self, SecStream };
 use identity::{ HostId, PeerId };
 use tokio_core::reactor;
-use futures::{ future, task, Async, Future, Poll };
+use futures::{ future, task, Async, Future, Poll, Stream };
 use futures::task::Task;
 use tokio_core::io::{ Io, Framed };
 
@@ -65,20 +65,20 @@ impl Peer {
     }
 }
 
-impl Future for Peer {
-    type Item = ();
+impl Stream for Peer {
+    type Item = mplex::Stream;
     type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(ref mut stream) = *self.0.idle_connection.borrow_mut() {
-            // TODO: check if the stream is closed?
-        }
-        if let Some(ref mut mux) = *self.0.mux.borrow_mut() {
-            mux.poll()?;
-        }
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let mut my_task = self.0.task.borrow_mut();
         if my_task.is_none() {
             *my_task = Some(task::current());
+        }
+        if let Some(ref mut mux) = *self.0.mux.borrow_mut() {
+            if let Async::Ready(Some(stream)) = mux.poll()? {
+                println!("New incoming stream {:?} for peer {:?}", stream, self.0.info);
+                return Ok(Async::Ready(Some(stream)));
+            }
         }
         Ok(Async::NotReady)
     }
