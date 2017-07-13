@@ -126,6 +126,7 @@ impl State {
             .and_then(|conn| {
                 Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
                     .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, msgio::LengthPrefixed>| -> Box<Future<Item=_, Error=_>> {
+                        // TODO: use into_parts
                         Box::new(future::ok(mplex::Multiplexer::new(framed.into_inner(), true)))
                     })
                     .finish()
@@ -156,6 +157,7 @@ impl State {
                         .and_then(move |stream| {
                             Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
                                 .negotiate(protocol, move |framed: MsgFramed<mplex::Stream, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_> + 'static> {
+                                    // TODO: use into_parts
                                     Box::new(future::ok(framed.into_inner()))
                                 })
                                 .finish()
@@ -176,7 +178,7 @@ impl State {
             .and_then(move |conn| {
                 let negotiator = Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
                     .negotiate(b"/secio/1.0.0", move |framed: Framed<transport::Transport, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_>> {
-                        Box::new(secio::handshake(framed.into_inner().framed(msgio::LengthPrefixed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)), host, peer_id))
+                        Box::new(secio::handshake(Framed::from_parts(framed.into_parts(), msgio::LengthPrefixed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)), host, peer_id))
                     });
                 // if allow_unencrypted {
                 //     negotiator = negotiator.negotiate(b"/plaintext/1.0.0", |conn| -> Box<Future<Item=Box<Transport>, Error=io::Error>> { Box::new(future::ok(Box::new(conn.framed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)) as Box<Transport>)) });
