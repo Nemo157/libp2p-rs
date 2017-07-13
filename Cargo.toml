@@ -1,19 +1,34 @@
 [package]
+authors = ["Wim Looman <wim@nemo157.com>"]
 name = "libp2p"
 version = "0.1.0"
-authors = ["Wim Looman <wim@nemo157.com>"]
 
 [dependencies]
-libp2p-identity = { path = "../libp2p-identity-rs" }
-libp2p-secio = { path = "../libp2p-secio-rs" }
-maddr = "0.2.0"
-mhash = { version = "0.2.0", features = ["generation", "validation", "sha2"] }
-multistream = { path = "../multistream-rs" }
-msgio = { path = "../msgio-rs" }
-mplex = { path = "../mplex-rs" }
-openssl = "*"
+bytes = "0.4.4"
 futures = "*"
-tokio-core = "*"
 futures-mpsc = "*"
 futures-spawn = "*"
+maddr = "0.2.0"
+openssl = "*"
 relay = "*"
+tokio-core = "0.1.8"
+tokio-io = "0.1.2"
+
+[dependencies.libp2p-identity]
+path = "../libp2p-identity-rs"
+
+[dependencies.libp2p-secio]
+path = "../libp2p-secio-rs"
+
+[dependencies.mhash]
+features = ["generation", "validation", "sha2"]
+version = "0.2.0"
+
+[dependencies.mplex]
+path = "../mplex-rs"
+
+[dependencies.msgio]
+path = "../msgio-rs"
+
+[dependencies.multistream]
+path = "../multistream-rs"

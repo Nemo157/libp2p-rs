@@ -1,5 +1,6 @@
 #![feature(conservative_impl_trait)]
 
+extern crate bytes;
 pub extern crate libp2p_identity as identity;
 extern crate libp2p_secio as secio;
 extern crate maddr;
@@ -11,6 +12,7 @@ extern crate futures;
 extern crate futures_mpsc;
 extern crate futures_spawn;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate relay;
 extern crate mplex;
 

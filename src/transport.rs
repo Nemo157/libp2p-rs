@@ -1,9 +1,9 @@
 use std::io;
 
 use maddr::MultiAddr;
-use tokio_core::io::Io;
+use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_core::reactor;
-use futures::{ future, Future };
+use futures::{ future, Future, Poll };
 
 use tcp;
 
@@ -66,5 +66,11 @@ impl io::Write for Transport {
     }
 }
 
-impl Io for Transport {
+impl AsyncRead for Transport { }
+impl AsyncWrite for Transport {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        match *self {
+            Transport::Tcp(ref mut transport) => transport.shutdown()
+        }
+    }
 }
