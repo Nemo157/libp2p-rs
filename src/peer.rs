@@ -23,14 +23,14 @@ struct State {
     info: PeerInfo,
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
-    idle_connection: RefCell<Option<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>>>,
-    mux: RefCell<Option<mplex::Multiplexer<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>>>>,
+    idle_connection: RefCell<Option<SecStream<transport::Transport>>>,
+    mux: RefCell<Option<mplex::Multiplexer<SecStream<transport::Transport>>>>,
     task: RefCell<Option<Task>>,
 }
 
 struct ConnectFuture {
     state: Rc<State>,
-    attempt: Box<Future<Item=SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, Error=io::Error>>,
+    attempt: Box<Future<Item=SecStream<transport::Transport>, Error=io::Error>>,
     addrs: Vec<MultiAddr>,
 }
 
@@ -99,7 +99,7 @@ impl State {
         }
     }
 
-    fn do_connect(state: Rc<Self>) -> impl Future<Item=SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, Error=io::Error> {
+    fn do_connect(state: Rc<Self>) -> impl Future<Item=SecStream<transport::Transport>, Error=io::Error> {
         let mut addrs = Vec::from_iter(state.info.addrs().iter().cloned());
         if let Some(addr) = addrs.pop() {
             let attempt = state.connect(&addr);
@@ -113,7 +113,7 @@ impl State {
         }
     }
 
-    fn connect_stream(state: Rc<Self>) -> impl Future<Item=SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, Error=io::Error> {
+    fn connect_stream(state: Rc<Self>) -> impl Future<Item=SecStream<transport::Transport>, Error=io::Error> {
         if let Some(connection) = state.idle_connection.borrow_mut().take() {
             println!("Peer {:?} already connected", state.info.id());
             return future::Either::A(future::ok(connection));
@@ -121,11 +121,11 @@ impl State {
         future::Either::B(State::do_connect(state))
     }
 
-    fn connect_mux(state: Rc<Self>) -> impl Future<Item=mplex::Multiplexer<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>>, Error=io::Error> {
+    fn connect_mux(state: Rc<Self>) -> impl Future<Item=mplex::Multiplexer<SecStream<transport::Transport>>, Error=io::Error> {
         State::connect_stream(state)
             .and_then(|conn| {
                 Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
-                    .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, msgio::LengthPrefixed>| -> Box<Future<Item=_, Error=_>> {
+                    .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<SecStream<transport::Transport>, msgio::LengthPrefixed>| -> Box<Future<Item=_, Error=_>> {
                         // TODO: use into_parts
                         Box::new(future::ok(mplex::Multiplexer::new(framed.into_inner(), true)))
                     })
@@ -170,7 +170,7 @@ impl State {
             })
     }
 
-    fn connect(&self, addr: &MultiAddr) -> Box<Future<Item=SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, Error=io::Error>> {
+    fn connect(&self, addr: &MultiAddr) -> Box<Future<Item=SecStream<transport::Transport>, Error=io::Error>> {
         let host = self.host.clone();
         let peer_id = self.info.id().clone();
         println!("Connecting peer {:?} via {}", peer_id, addr);
@@ -178,7 +178,7 @@ impl State {
             .and_then(move |conn| {
                 let negotiator = Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
                     .negotiate(b"/secio/1.0.0", move |framed: Framed<transport::Transport, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_>> {
-                        Box::new(secio::handshake(Framed::from_parts(framed.into_parts(), msgio::LengthPrefixed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)), host, peer_id))
+                        Box::new(secio::handshake(framed.into_parts(), host, peer_id))
                     });
                 // if allow_unencrypted {
                 //     negotiator = negotiator.negotiate(b"/plaintext/1.0.0", |conn| -> Box<Future<Item=Box<Transport>, Error=io::Error>> { Box::new(future::ok(Box::new(conn.framed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)) as Box<Transport>)) });
@@ -189,7 +189,7 @@ impl State {
 }
 
 impl Future for ConnectFuture {
-    type Item = SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>;
+    type Item = SecStream<transport::Transport>;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
