@@ -27,8 +27,9 @@ impl Clone for Swarm {
 }
 
 fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=(), Error=io::Error> {
-    // TODO: accept negotiation from peer
-    future::ok(())
+    // TODO: Have some services to negotiate
+    Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), false)
+        .finish()
 }
 
 impl Swarm {

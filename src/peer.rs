@@ -124,7 +124,7 @@ impl State {
     fn connect_mux(state: Rc<Self>) -> impl Future<Item=mplex::Multiplexer<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>>, Error=io::Error> {
         State::connect_stream(state)
             .and_then(|conn| {
-                Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
+                Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
                     .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<SecStream<Framed<transport::Transport, msgio::LengthPrefixed>>, msgio::LengthPrefixed>| -> Box<Future<Item=_, Error=_>> {
                         // TODO: use into_parts
                         Box::new(future::ok(mplex::Multiplexer::new(framed.into_inner(), true)))
@@ -155,7 +155,7 @@ impl State {
                 if let Some(ref mut mux) = *state.mux.borrow_mut() {
                     mux.new_stream()
                         .and_then(move |stream| {
-                            Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
+                            Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
                                 .negotiate(protocol, move |framed: MsgFramed<mplex::Stream, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_> + 'static> {
                                     // TODO: use into_parts
                                     Box::new(future::ok(framed.into_inner()))
@@ -176,7 +176,7 @@ impl State {
         println!("Connecting peer {:?} via {}", peer_id, addr);
         Box::new(transport::connect(&addr, &self.event_loop)
             .and_then(move |conn| {
-                let negotiator = Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)))
+                let negotiator = Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
                     .negotiate(b"/secio/1.0.0", move |framed: Framed<transport::Transport, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_>> {
                         Box::new(secio::handshake(Framed::from_parts(framed.into_parts(), msgio::LengthPrefixed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)), host, peer_id))
                     });
