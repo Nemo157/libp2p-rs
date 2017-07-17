@@ -10,10 +10,9 @@ use identity::{ HostId, PeerId };
 use tokio_core::reactor;
 use futures::{ future, task, Async, Future, Poll, Stream };
 use futures::task::Task;
-use tokio_io::AsyncRead;
-use tokio_io::codec::Framed;
+use tokio_io::codec::{Framed, FramedParts};
 
-use msgio::{self, MsgIo, MsgFramed};
+use msgio::Identity;
 use mplex;
 
 use { PeerInfo, transport };
@@ -61,7 +60,7 @@ impl Peer {
         State::pre_connect(self.0.clone())
     }
 
-    pub fn open_stream(&mut self, protocol: &'static [u8]) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    pub fn open_stream(&mut self, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         State::open_stream(self.0.clone(), protocol)
     }
 }
@@ -124,10 +123,9 @@ impl State {
     fn connect_mux(state: Rc<Self>) -> impl Future<Item=mplex::Multiplexer<Framed<transport::Transport, SecStream>>, Error=io::Error> {
         State::connect_stream(state)
             .and_then(|conn| {
-                Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
-                    .negotiate(b"/mplex/6.7.0", move |framed: MsgFramed<Framed<transport::Transport, SecStream>, msgio::LengthPrefixed>| -> Box<Future<Item=_, Error=_>> {
-                        // TODO: use into_parts
-                        Box::new(future::ok(mplex::Multiplexer::new(framed.into_inner(), true)))
+                Negotiator::start_framed(conn, true)
+                    .negotiate(b"/mplex/6.7.0", move |(parts, codec): (FramedParts<transport::Transport>, SecStream)| -> Box<Future<Item=_, Error=_>> {
+                        Box::new(future::ok(mplex::Multiplexer::new(Framed::from_parts(parts, codec), true)))
                     })
                     .finish()
             })
@@ -149,16 +147,15 @@ impl State {
         }
     }
 
-    fn open_stream(state: Rc<Self>, protocol: &'static [u8]) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    fn open_stream(state: Rc<Self>, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         State::ensure_mux(state)
             .and_then(move |state| {
                 if let Some(ref mut mux) = *state.mux.borrow_mut() {
                     mux.new_stream()
                         .and_then(move |stream| {
-                            Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
-                                .negotiate(protocol, move |framed: MsgFramed<mplex::Stream, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_> + 'static> {
-                                    // TODO: use into_parts
-                                    Box::new(future::ok(framed.into_inner()))
+                            Negotiator::start(stream, true)
+                                .negotiate(protocol, move |(parts, _): (FramedParts<mplex::Stream>, Identity)| -> Box<Future<Item=_,Error=_> + 'static> {
+                                    Box::new(future::ok(parts))
                                 })
                                 .finish()
                         })
@@ -176,9 +173,9 @@ impl State {
         println!("Connecting peer {:?} via {}", peer_id, addr);
         Box::new(transport::connect(&addr, &self.event_loop)
             .and_then(move |conn| {
-                let negotiator = Negotiator::start(conn.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), true)
-                    .negotiate(b"/secio/1.0.0", move |framed: Framed<transport::Transport, msgio::LengthPrefixed>| -> Box<Future<Item=_,Error=_>> {
-                        Box::new(secio::handshake(framed.into_parts(), host, peer_id))
+                let negotiator = Negotiator::start(conn, true)
+                    .negotiate(b"/secio/1.0.0", move |(parts, _): (FramedParts<transport::Transport>, Identity)| -> Box<Future<Item=_,Error=_>> {
+                        Box::new(secio::handshake(parts, host, peer_id))
                     });
                 // if allow_unencrypted {
                 //     negotiator = negotiator.negotiate(b"/plaintext/1.0.0", |conn| -> Box<Future<Item=Box<Transport>, Error=io::Error>> { Box::new(future::ok(Box::new(conn.framed(msgio::Prefix::BigEndianU32, msgio::Suffix::None)) as Box<Transport>)) });

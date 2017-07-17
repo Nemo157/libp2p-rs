@@ -2,12 +2,12 @@ use std::io;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use futures::{ future, Future, Poll, Async, Sink, Stream };
+use futures::{ future, Future, Poll, Async, Stream };
 use tokio_core::reactor;
 use identity::{ HostId, PeerId };
 use mplex;
 use multistream::Negotiator;
-use msgio::{self, MsgIo, MsgFramed};
+use tokio_io::codec::FramedParts;
 
 use { PeerInfo };
 use peer::Peer;
@@ -28,7 +28,7 @@ impl Clone for Swarm {
 
 fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=(), Error=io::Error> {
     // TODO: Have some services to negotiate
-    Negotiator::start(stream.framed(msgio::LengthPrefixed(msgio::Prefix::VarInt, msgio::Suffix::NewLine)), false)
+    Negotiator::start(stream, false)
         .finish()
 }
 
@@ -67,7 +67,7 @@ impl Swarm {
             .map(discard as fn(Vec<()>) -> ())
     }
 
-    pub fn open_stream(&mut self, id: PeerId, protocol: &'static [u8]) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    pub fn open_stream(&mut self, id: PeerId, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(&*peer.id())) {
             future::Either::A(peer.open_stream(protocol))
         } else {
