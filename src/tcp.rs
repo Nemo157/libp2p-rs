@@ -38,15 +38,6 @@ fn multiaddr_to_socketaddr(addr: &MultiAddr) -> io::Result<SocketAddr> {
     })
 }
 
-fn socketaddr_to_multiaddr(addr: &SocketAddr) -> MultiAddr {
-    let ip = match addr.ip() {
-        IpAddr::V4(ip) => Segment::IP4(ip),
-        IpAddr::V6(ip) => Segment::IP6(ip),
-    };
-    let port = Segment::Tcp(addr.port());
-    MultiAddr::new(vec![ip, port])
-}
-
 pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<Item=Transport, Error=io::Error> {
     match multiaddr_to_socketaddr(addr) {
         Ok(addr) => future::Either::A(TcpStream::connect(&addr, event_loop).map(Transport)),
@@ -58,5 +49,9 @@ pub fn listen(addr: &MultiAddr, event_loop: &reactor::Handle) -> io::Result<impl
     let addr = multiaddr_to_socketaddr(addr)?;
     Ok(TcpListener::bind(&addr, event_loop)?
         .incoming() 
-        .map(|(transport, addr)| (Transport(transport), socketaddr_to_multiaddr(&addr))))
+        .map(|(transport, addr)| {
+            let transport = Transport(transport);
+            let addr = MultiAddr::from(addr.ip()) + Segment::Tcp(addr.port());
+            (transport, addr)
+        }))
 }
