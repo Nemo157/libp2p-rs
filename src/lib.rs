@@ -15,6 +15,8 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate relay;
 extern crate mplex;
+#[macro_use]
+extern crate slice_as_array;
 
 #[macro_use]
 mod macros;
@@ -24,6 +26,7 @@ mod peerinfo;
 mod swarm;
 pub mod tcp;
 mod transport;
+mod ping;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;

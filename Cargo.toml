@@ -11,6 +11,7 @@ futures-spawn = "*"
 maddr = "0.2.0"
 openssl = "*"
 relay = "*"
+slice_as_array = "1.1.0"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
 

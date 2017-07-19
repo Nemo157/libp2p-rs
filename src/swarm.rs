@@ -11,13 +11,15 @@ use tokio_io::codec::FramedParts;
 
 use { PeerInfo };
 use peer::Peer;
+use ping;
 
 struct State {
     id: HostId,
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
     peers: RefCell<Vec<Peer>>,
-    accepting: RefCell<Vec<Box<Future<Item=(), Error=io::Error> + 'static>>>,
+    accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
+    connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
 }
 
 pub struct Swarm(Rc<State>);
@@ -26,9 +28,12 @@ impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
 }
 
-fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=(), Error=io::Error> {
+fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
     // TODO: Have some services to negotiate
     Negotiator::start(stream, false)
+        .negotiate(b"/ipfs/ping/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
+            Box::new(future::ok(ping::accept(parts)))
+        })
         .finish()
 }
 
@@ -39,7 +44,8 @@ impl Swarm {
             allow_unencrypted: allow_unencrypted,
             event_loop: event_loop.clone(),
             peers: RefCell::new(Vec::new()),
-            accepting: RefCell::new(Vec::new()),
+            accepting_services: RefCell::new(Vec::new()),
+            connected_services: RefCell::new(Vec::new()),
         }))
     }
 
@@ -81,26 +87,44 @@ impl Future for Swarm {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut accepting = self.0.accepting.borrow_mut();
+        let mut accepting_services = self.0.accepting_services.borrow_mut();
+        let mut connected_services = self.0.connected_services.borrow_mut();
 
         for mut peer in self.0.peers.borrow().clone() {
             while let Async::Ready(Some(stream)) = peer.poll()? {
-                accepting.push(Box::new(accept_stream(stream, &peer)));
+                accepting_services.push(Box::new(accept_stream(stream, &peer)));
             }
         }
 
-        let mut i = 0;
-        while i < accepting.len() {
-            match accepting[i].poll() {
-                Ok(Async::Ready(())) => {
-                    accepting.swap_remove(i);
+        {
+            let mut i = 0;
+            while i < accepting_services.len() {
+                match accepting_services[i].poll() {
+                    Ok(Async::Ready(service)) => {
+                        accepting_services.swap_remove(i);
+                        connected_services.push(service);
+                    }
+                    Ok(Async::NotReady) => {
+                        i += 1;
+                    }
+                    Err(err) => {
+                        println!("Error while accepting peers stream: {:?}", err);
+                        accepting_services.swap_remove(i);
+                    }
                 }
-                Ok(Async::NotReady) => {
-                    i += 1;
-                }
-                Err(err) => {
-                    println!("Error while accepting peers stream: {:?}", err);
-                    accepting.swap_remove(i);
+            }
+        }
+
+        {
+            let mut i = 0;
+            while i < connected_services.len() {
+                match connected_services[i].poll() {
+                    Ok(Async::Ready(())) | Err(()) => {
+                        connected_services.swap_remove(i);
+                    }
+                    Ok(Async::NotReady) => {
+                        i += 1;
+                    }
                 }
             }
         }
