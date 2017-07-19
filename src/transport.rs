@@ -3,7 +3,7 @@ use std::io;
 use maddr::MultiAddr;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_core::reactor;
-use futures::{ future, Future, Poll };
+use futures::{future, Future, Poll, Stream};
 
 use tcp;
 
@@ -17,6 +17,14 @@ pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<It
         future::Either::A(tcp::connect(addr, event_loop).map(Transport::Tcp))
     } else {
         future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "No transports can handle")))
+    }
+}
+
+pub fn listen(addr: &MultiAddr, event_loop: &reactor::Handle) -> io::Result<impl Stream<Item=(Transport, MultiAddr), Error=io::Error>> {
+    if tcp::can_handle(addr) {
+        Ok(tcp::listen(addr, event_loop)?.map(|(transport, addr)| (Transport::Tcp(transport), addr)))
+    } else {
+        Err(io::Error::new(io::ErrorKind::Other, "No transports can handle"))
     }
 }
 

@@ -8,16 +8,19 @@ use identity::{ HostId, PeerId };
 use mplex;
 use multistream::Negotiator;
 use tokio_io::codec::FramedParts;
+use maddr::MultiAddr;
 
 use { PeerInfo };
 use peer::Peer;
 use ping;
+use transport;
 
 struct State {
     id: HostId,
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
     peers: RefCell<Vec<Peer>>,
+    listeners: RefCell<Vec<Box<Stream<Item=(transport::Transport, MultiAddr), Error=io::Error>>>>,
     accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
     connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
 }
@@ -38,20 +41,24 @@ fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Fut
 }
 
 impl Swarm {
-    pub fn new(id: HostId, allow_unencrypted: bool, event_loop: reactor::Handle) -> Swarm {
-        Swarm(Rc::new(State {
+    pub fn new(id: HostId, listen_addresses: &[MultiAddr], allow_unencrypted: bool, event_loop: reactor::Handle) -> io::Result<Swarm> {
+        let listeners: io::Result<Vec<_>> = listen_addresses.iter()
+            .map(|addr| transport::listen(addr, &event_loop).map(|transport| Box::new(transport) as Box<_>))
+            .collect();
+        Ok(Swarm(Rc::new(State {
             id: id,
             allow_unencrypted: allow_unencrypted,
             event_loop: event_loop.clone(),
             peers: RefCell::new(Vec::new()),
+            listeners: RefCell::new(listeners?),
             accepting_services: RefCell::new(Vec::new()),
             connected_services: RefCell::new(Vec::new()),
-        }))
+        })))
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) -> impl Future<Item=(), Error=()> {
         println!("Adding peer {:?}", info);
-        let peer = Peer::new(self.0.id.clone(), info, self.0.allow_unencrypted, self.0.event_loop.clone());
+        let peer = Peer::connect(self.0.id.clone(), info, self.0.allow_unencrypted, self.0.event_loop.clone());
         self.0.peers.borrow_mut().push(peer);
         future::ok(())
     }
@@ -61,7 +68,7 @@ impl Swarm {
         let id = self.0.id.clone();
         let allow_unencrypted = self.0.allow_unencrypted;
         let event_loop = self.0.event_loop.clone();
-        let peers = infos.into_iter().map(|info| Peer::new(id.clone(), info, allow_unencrypted, event_loop.clone()));
+        let peers = infos.into_iter().map(|info| Peer::connect(id.clone(), info, allow_unencrypted, event_loop.clone()));
         self.0.peers.borrow_mut().extend(peers);
         future::ok(())
     }
@@ -89,6 +96,17 @@ impl Future for Swarm {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut accepting_services = self.0.accepting_services.borrow_mut();
         let mut connected_services = self.0.connected_services.borrow_mut();
+
+        for mut listener in &mut *self.0.listeners.borrow_mut() {
+            while let Async::Ready(Some((conn, addr))) = listener.poll()? {
+                self.0.peers.borrow_mut().push(Peer::accept(
+                        self.0.id.clone(),
+                        conn,
+                        addr,
+                        self.0.allow_unencrypted,
+                        self.0.event_loop.clone()));
+            }
+        }
 
         for mut peer in self.0.peers.borrow().clone() {
             while let Async::Ready(Some(stream)) = peer.poll()? {

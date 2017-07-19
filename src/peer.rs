@@ -21,6 +21,7 @@ struct State {
     info: PeerInfo,
     allow_unencrypted: bool,
     event_loop: reactor::Handle,
+    pre_connection: RefCell<Option<transport::Transport>>,
     idle_connection: RefCell<Option<SecStream<transport::Transport>>>,
     mux: RefCell<Option<mplex::Multiplexer<SecStream<transport::Transport>>>>,
     task: RefCell<Option<Task>>,
@@ -39,12 +40,26 @@ impl Clone for Peer {
 }
 
 impl Peer {
-    pub fn new(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
+    pub fn connect(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
         Peer(Rc::new(State {
             host,
             info,
             allow_unencrypted,
             event_loop: event_loop.clone(),
+            pre_connection: RefCell::new(None),
+            idle_connection: RefCell::new(None),
+            mux: RefCell::new(None),
+            task: RefCell::new(None),
+        }))
+    }
+
+    pub fn accept(host: HostId, conn: transport::Transport, addr: MultiAddr, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
+        Peer(Rc::new(State {
+            host,
+            info: PeerInfo::new(PeerId::Unknown, vec![addr]),
+            allow_unencrypted,
+            event_loop: event_loop.clone(),
+            pre_connection: RefCell::new(Some(conn)),
             idle_connection: RefCell::new(None),
             mux: RefCell::new(None),
             task: RefCell::new(None),

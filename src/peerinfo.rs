@@ -10,8 +10,8 @@ pub struct PeerInfo {
 }
 
 impl PeerInfo {
-    pub fn new(id: PeerId) -> PeerInfo {
-        PeerInfo { id: RefCell::new(id), addresses: Vec::new() }
+    pub fn new(id: PeerId, addresses: Vec<MultiAddr>) -> PeerInfo {
+        PeerInfo { id: RefCell::new(id), addresses }
     }
 
     /// addr should consist of `/<routing info>/ipfs/<peer id hash>`, e.g.
@@ -43,8 +43,10 @@ impl PeerInfo {
     /// public key
     // TODO: Should store public keys somewhere centralized once we acquire them
     pub fn update_id(&self, id: PeerId) {
-        if !self.id().matches(&id) {
-            panic!("Attempted to update peer info with different id, expected proven id for {:?} got {:?}", self.id, id);
+        if let PeerId::Unknown = id { /* ok */ } else {
+            if !self.id().matches(&id) {
+                panic!("Attempted to update peer info with different id, expected proven id for {:?} got {:?}", self.id, id);
+            }
         }
         *self.id.borrow_mut() = id;
     }
