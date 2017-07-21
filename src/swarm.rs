@@ -31,7 +31,7 @@ impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
 }
 
-fn accept_stream(stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
+fn accept_stream(stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
     // TODO: Have some services to negotiate
     Negotiator::start(stream, false)
         .negotiate(b"/ipfs/ping/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
@@ -73,13 +73,6 @@ impl Swarm {
         future::ok(())
     }
 
-    pub fn pre_connect_all(&mut self) -> impl Future<Item=(), Error=()> {
-        println!("Pre connecting peers");
-        fn discard(_: Vec<()>) { }
-        future::join_all(self.0.peers.borrow_mut().iter_mut().map(|peer| peer.pre_connect()).collect::<Vec<_>>())
-            .map(discard as fn(Vec<()>) -> ())
-    }
-
     pub fn open_stream(&mut self, id: PeerId, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(&*peer.id())) {
             future::Either::A(peer.open_stream(protocol))
@@ -103,13 +96,12 @@ impl Future for Swarm {
                         self.0.id.clone(),
                         conn,
                         addr,
-                        self.0.allow_unencrypted,
-                        self.0.event_loop.clone()));
+                        self.0.allow_unencrypted));
             }
         }
 
         for mut peer in self.0.peers.borrow().clone() {
-            while let Async::Ready(Some(stream)) = peer.poll()? {
+            while let Async::Ready(Some(stream)) = peer.poll_accept()? {
                 accepting_services.push(Box::new(accept_stream(stream, &peer)));
             }
         }

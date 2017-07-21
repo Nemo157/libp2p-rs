@@ -3,7 +3,7 @@ use std::cell::{Ref, RefCell};
 use maddr::{ MultiAddr, Segment };
 use identity::PeerId;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PeerInfo {
     id: RefCell<PeerId>,
     addresses: Vec<MultiAddr>,

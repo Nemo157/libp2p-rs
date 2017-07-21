@@ -27,6 +27,7 @@ mod swarm;
 pub mod tcp;
 mod transport;
 mod ping;
+mod mux;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;
