@@ -22,6 +22,7 @@ type Mux = mplex::Multiplexer<Stream>;
 enum State {
     Connecting(Box<Future<Item=Mux, Error=io::Error>>, Vec<oneshot::Sender<()>>),
     Connected(Mux),
+    Disconnected,
     Invalid,
 }
 
@@ -123,6 +124,9 @@ impl State {
             State::Connected(_) => {
                 future::Either::B(future::ok(()))
             }
+            State::Disconnected => {
+                panic!("Disconnected, TODO: support reconnecting");
+            }
             State::Invalid => {
                 panic!("Invalid EventuallyMultiplexer");
             }
@@ -151,8 +155,16 @@ impl State {
                     if let Ok(Async::Ready(Some(ref stream))) = res {
                         println!("New incoming muxed stream {:?} for peer", stream);
                     }
-                    *self = State::Connected(mux);
+                    *self = if let Ok(Async::Ready(None)) = res {
+                        State::Disconnected
+                    } else {
+                        State::Connected(mux)
+                    };
                     return res;
+                }
+                State::Disconnected => {
+                    *self = State::Disconnected;
+                    return Ok(Async::Ready(None));
                 }
                 State::Invalid => {
                     panic!("Invalid EventuallyMultiplexer");
