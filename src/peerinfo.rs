@@ -1,17 +1,15 @@
-use std::cell::{Ref, RefCell};
-
 use maddr::{ MultiAddr, Segment };
 use identity::PeerId;
 
 #[derive(Clone, Debug)]
 pub struct PeerInfo {
-    id: RefCell<PeerId>,
-    addresses: Vec<MultiAddr>,
+    pub(crate) id: PeerId,
+    pub(crate) addrs: Vec<MultiAddr>,
 }
 
 impl PeerInfo {
-    pub fn new(id: PeerId, addresses: Vec<MultiAddr>) -> PeerInfo {
-        PeerInfo { id: RefCell::new(id), addresses }
+    pub fn new(id: PeerId, addrs: Vec<MultiAddr>) -> PeerInfo {
+        PeerInfo { id, addrs }
     }
 
     /// addr should consist of `/<routing info>/ipfs/<peer id hash>`, e.g.
@@ -23,8 +21,8 @@ impl PeerInfo {
     pub fn from_addr(addr: MultiAddr) -> Result<PeerInfo, ()> {
         if let Some((addr, Segment::Ipfs(hash))) = addr.split_off_last() {
             Ok(PeerInfo {
-                id: RefCell::new(PeerId::from_hash(hash)),
-                addresses: vec![addr],
+                id: PeerId::from_hash(hash),
+                addrs: vec![addr],
             })
         } else {
             Err(())
@@ -32,22 +30,10 @@ impl PeerInfo {
     }
 
     pub fn addrs(&self) -> &[MultiAddr] {
-        &self.addresses
+        &self.addrs
     }
 
-    pub fn id(&self) -> Ref<PeerId> {
-        self.id.borrow()
-    }
-
-    /// Allow updating this peer's id with a proven id once we obtain their
-    /// public key
-    // TODO: Should store public keys somewhere centralized once we acquire them
-    pub fn update_id(&self, id: PeerId) {
-        if let PeerId::Unknown = id { /* ok */ } else {
-            if !self.id().matches(&id) {
-                panic!("Attempted to update peer info with different id, expected proven id for {:?} got {:?}", self.id, id);
-            }
-        }
-        *self.id.borrow_mut() = id;
+    pub fn id(&self) -> &PeerId {
+        &self.id
     }
 }

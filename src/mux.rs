@@ -1,5 +1,4 @@
-use std::{io, mem};
-use std::iter::FromIterator;
+use std::{fmt, io, mem};
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -16,8 +15,8 @@ use mplex;
 use PeerInfo;
 use transport::{self, Transport};
 
-type Stream = SecStream<Transport>;
-type Mux = mplex::Multiplexer<Stream>;
+pub(crate) type Stream = SecStream<Transport>;
+pub(crate) type Mux = mplex::Multiplexer<Stream>;
 
 enum State {
     Connecting(Box<Future<Item=Mux, Error=io::Error>>, Vec<oneshot::Sender<()>>),
@@ -26,18 +25,18 @@ enum State {
     Invalid,
 }
 
-pub struct EventuallyMultiplexer {
+#[derive(Debug)]
+pub(crate) struct EventuallyMultiplexer {
     inner: Rc<RefCell<State>>,
 }
 
-fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId, _allow_unencrypted: bool) -> impl Future<Item=Stream, Error=io::Error> {
+fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
     println!("Connected transport, negotiating stream to {:?}", peer);
     Negotiator::start(conn, true)
         .negotiate(b"/secio/1.0.0", move |parts: FramedParts<Transport>| -> Box<Future<Item=_,Error=_>> {
             Box::new(secio::handshake(parts, host, peer))
         })
         .finish()
-        .map(|(_, stream)| stream)
 }
 
 fn negotiate_mux(stream: Stream) -> impl Future<Item=Mux, Error=io::Error> {
@@ -50,14 +49,14 @@ fn negotiate_mux(stream: Stream) -> impl Future<Item=Mux, Error=io::Error> {
 }
 
 impl EventuallyMultiplexer {
-    pub fn connect(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> EventuallyMultiplexer {
+    pub(crate) fn connect(host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> EventuallyMultiplexer {
         println!("Connecting mux for {:?}", info);
-        let addrs = Vec::from_iter(info.addrs().iter().cloned());
-        let peer = info.id().clone();
+        let addrs = info.addrs.clone();
+        let peer = info.id.clone();
         let mux = stream::iter(addrs.into_iter().map(Ok))
             .and_then(move |addr| transport::connect(&addr, &event_loop))
-            .and_then(move |conn| negotiate_stream(conn, host.clone(), peer.clone(), allow_unencrypted))
-            .and_then(negotiate_mux)
+            .and_then(move |conn| negotiate_stream(conn, host.clone(), peer.clone()))
+            .and_then(move |(id, conn)| negotiate_mux(conn))
             .then(|res| {
                 match res {
                     Ok(mux) => Ok(Some(mux)),
@@ -81,19 +80,22 @@ impl EventuallyMultiplexer {
         }
     }
 
-    pub fn accept(host: HostId, info: PeerInfo, allow_unencrypted: bool, conn: transport::Transport) -> EventuallyMultiplexer {
-        let peer = info.id().clone();
-        let mux = negotiate_stream(conn, host, peer, allow_unencrypted).and_then(negotiate_mux);
+    pub(crate) fn start_accept(host: HostId, conn: Transport) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
+        negotiate_stream(conn, host, PeerId::Unknown)
+    }
+
+    pub(crate) fn finish_accept(conn: Stream) -> EventuallyMultiplexer {
+        let mux = negotiate_mux(conn);
         EventuallyMultiplexer {
             inner: Rc::new(RefCell::new(State::Connecting(Box::new(mux), Vec::new())))
         }
     }
 
-    pub fn poll_accept(&self) -> Poll<Option<mplex::Stream>, io::Error> {
+    pub(crate) fn poll_accept(&self) -> Poll<Option<mplex::Stream>, io::Error> {
         self.inner.borrow_mut().poll_accept()
     }
 
-    pub fn new_stream(&self) -> impl Future<Item=mplex::Stream, Error=io::Error> {
+    pub(crate) fn new_stream(&self) -> impl Future<Item=mplex::Stream, Error=io::Error> {
         let inner = self.inner.clone();
         self.inner.borrow_mut()
             .await_mux()
@@ -170,6 +172,28 @@ impl State {
                     panic!("Invalid EventuallyMultiplexer");
                 }
             }
+        }
+    }
+}
+
+impl fmt::Debug for State {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            State::Connecting(_, _) =>
+                f.debug_tuple("State::Connecting")
+                    .field(&"_")
+                    .field(&"_")
+                    .finish(),
+            State::Connected(ref mux) =>
+                f.debug_tuple("State::Connected")
+                    .field(mux)
+                    .finish(),
+            State::Disconnected =>
+                f.debug_tuple("State::Disconnected")
+                    .finish(),
+            State::Invalid =>
+                f.debug_tuple("State::Invalid")
+                    .finish(),
         }
     }
 }

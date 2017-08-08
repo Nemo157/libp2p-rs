@@ -1,6 +1,5 @@
 use std::io;
 use std::rc::Rc;
-use std::cell::Ref;
 
 use maddr::MultiAddr;
 use multistream::Negotiator;
@@ -11,35 +10,39 @@ use tokio_io::codec::FramedParts;
 
 use mplex;
 
-use mux::EventuallyMultiplexer;
-use { PeerInfo, transport };
+use transport::Transport;
+use mux::Stream;
+use muxmux::MultiplexerSquared;
+use { PeerInfo };
 
 struct State {
-    info: PeerInfo,
-    mux: EventuallyMultiplexer,
+    muxmux: MultiplexerSquared,
 }
 
 pub struct Peer { state: Rc<State> }
 
 impl Peer {
-    pub fn connect(host: HostId, info: PeerInfo, allow_unencrypted: bool, event_loop: reactor::Handle) -> Peer {
-        println!("Connecting peer {:?}", info);
-        let mux = EventuallyMultiplexer::connect(host, info.clone(), allow_unencrypted, event_loop);
-        Peer { state: Rc::new(State { info, mux }) }
+    pub(crate) fn new(host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> Peer {
+        println!("New peer {:?}", info);
+        let muxmux = MultiplexerSquared::new(host, info, event_loop);
+        Peer { state: Rc::new(State { muxmux }) }
     }
 
-    pub fn accept(host: HostId, conn: transport::Transport, addr: MultiAddr, allow_unencrypted: bool) -> Peer {
-        let info = PeerInfo::new(PeerId::Unknown, vec![addr]);
-        let mux = EventuallyMultiplexer::accept(host, info.clone(), allow_unencrypted, conn);
-        Peer { state: Rc::new(State { info, mux }) }
+    pub(crate) fn start_accept(host: HostId, conn: Transport, addr: MultiAddr) -> impl Future<Item=(PeerId, Stream, MultiAddr), Error=io::Error> {
+        MultiplexerSquared::start_accept(host, conn)
+            .map(move |(id, conn)| (id, conn, addr))
     }
 
-    pub fn id(&self) -> Ref<PeerId> {
-        self.state.info.id()
+    pub(crate) fn finish_accept(&mut self, conn: Stream, addr: MultiAddr) {
+        self.state.muxmux.finish_accept(conn, addr);
+    }
+
+    pub fn id(&self) -> PeerId {
+        self.state.muxmux.id()
     }
 
     pub fn open_stream(&mut self, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
-        self.state.mux.new_stream()
+        self.state.muxmux.new_stream()
             .and_then(move |stream| Negotiator::start(stream, true)
                 .negotiate(protocol, move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_,Error=_> + 'static> {
                     Box::new(future::ok(parts))
@@ -48,7 +51,7 @@ impl Peer {
     }
 
     pub fn poll_accept(&mut self) -> Poll<Option<mplex::Stream>, io::Error> {
-        self.state.mux.poll_accept()
+        self.state.muxmux.poll_accept()
     }
 }
 
