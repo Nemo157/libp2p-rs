@@ -39,9 +39,9 @@ fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<
         .finish()
 }
 
-fn negotiate_mux(stream: Stream) -> impl Future<Item=Mux, Error=io::Error> {
+fn negotiate_mux(stream: Stream, initiator: bool) -> impl Future<Item=Mux, Error=io::Error> {
     println!("Connected stream, negotiating mux");
-    Negotiator::start(stream, true)
+    Negotiator::start(stream, initiator)
         .negotiate(b"/mplex/6.7.0", |parts: FramedParts<SecStream<Transport>>| -> Box<Future<Item=_, Error=_>> {
             Box::new(future::ok(mplex::Multiplexer::from_parts(parts, true)))
         })
@@ -56,7 +56,7 @@ impl EventuallyMultiplexer {
         let mux = stream::iter(addrs.into_iter().map(Ok))
             .and_then(move |addr| transport::connect(&addr, &event_loop))
             .and_then(move |conn| negotiate_stream(conn, host.clone(), peer.clone()))
-            .and_then(move |(id, conn)| negotiate_mux(conn))
+            .and_then(move |(id, conn)| negotiate_mux(conn, true))
             .then(|res| {
                 match res {
                     Ok(mux) => Ok(Some(mux)),
@@ -85,7 +85,7 @@ impl EventuallyMultiplexer {
     }
 
     pub(crate) fn finish_accept(conn: Stream) -> EventuallyMultiplexer {
-        let mux = negotiate_mux(conn);
+        let mux = negotiate_mux(conn, false);
         EventuallyMultiplexer {
             inner: Rc::new(RefCell::new(State::Connecting(Box::new(mux), Vec::new())))
         }
