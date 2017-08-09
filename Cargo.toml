@@ -14,6 +14,7 @@ relay = "*"
 slice_as_array = "1.1.0"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
+protobuf = "*"
 
 [dependencies.libp2p-identity]
 path = "../libp2p-identity-rs"

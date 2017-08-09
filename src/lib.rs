@@ -17,6 +17,7 @@ extern crate relay;
 extern crate mplex;
 #[macro_use]
 extern crate slice_as_array;
+extern crate protobuf;
 
 #[macro_use]
 mod macros;
@@ -29,6 +30,8 @@ mod transport;
 mod ping;
 mod mux;
 mod muxmux;
+mod id;
+mod identify;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;

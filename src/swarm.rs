@@ -15,13 +15,17 @@ use peer::Peer;
 use ping;
 use transport;
 use mux;
+use id::IdService;
 
 struct State {
     id: HostId,
+    agent: String,
     event_loop: reactor::Handle,
     peers: RefCell<Vec<Peer>>,
+    listen_addresses: Vec<MultiAddr>,
     listeners: RefCell<Vec<Box<Stream<Item=(transport::Transport, MultiAddr), Error=io::Error>>>>,
     accepting: RefCell<Vec<Box<Future<Item=(PeerId, mux::Stream, MultiAddr), Error=io::Error>>>>,
+    id_service: IdService,
     accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
     connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
 }
@@ -32,29 +36,54 @@ impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
 }
 
-fn accept_stream(stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
+fn accept_stream(state: Rc<State>, stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
     // TODO: Have some services to negotiate
     Negotiator::start(stream, false)
         .negotiate(b"/ipfs/ping/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
             Box::new(future::ok(ping::accept(parts)))
         })
+        .negotiate(b"/ipfs/id/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
+            Box::new(future::ok(state.id_service.accept(parts)))
+        })
         .finish()
 }
 
 impl Swarm {
-    pub fn new(id: HostId, listen_addresses: &[MultiAddr], event_loop: reactor::Handle) -> io::Result<Swarm> {
+    pub fn new(id: HostId, agent: String, listen_addresses: Vec<MultiAddr>, event_loop: reactor::Handle) -> io::Result<Swarm> {
         let listeners: io::Result<Vec<_>> = listen_addresses.iter()
             .map(|addr| transport::listen(addr, &event_loop).map(|transport| Box::new(transport) as Box<_>))
             .collect();
-        Ok(Swarm(Rc::new(State {
-            id: id,
+        let mut swarm = Swarm(Rc::new(State {
+            id: id.clone(),
+            agent,
             event_loop: event_loop.clone(),
             peers: RefCell::new(Vec::new()),
+            listen_addresses: listen_addresses,
             listeners: RefCell::new(listeners?),
             accepting: RefCell::new(Vec::new()),
+            id_service: IdService::new(),
             accepting_services: RefCell::new(Vec::new()),
             connected_services: RefCell::new(Vec::new()),
-        })))
+        }));
+        swarm.0.id_service.update_swarm(swarm.clone());
+        Ok(swarm)
+    }
+
+    pub fn agent(&self) -> &str {
+        &self.0.agent
+    }
+
+    pub fn id(&self) -> &HostId {
+        &self.0.id
+    }
+
+    pub fn listen_addresses(&self) -> &[MultiAddr] {
+        &self.0.listen_addresses
+    }
+
+    pub fn protocols(&self) -> &[&str] {
+        static protos: &[&str] = &["/ipfs/id/1.0.0", "/ipfs/ping/1.0.0"];
+        protos
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) -> impl Future<Item=(), Error=()> {
@@ -129,7 +158,7 @@ impl Future for Swarm {
 
         for peer in peers.iter_mut() {
             while let Async::Ready(Some(stream)) = peer.poll_accept()? {
-                accepting_services.push(Box::new(accept_stream(stream, &peer)));
+                accepting_services.push(Box::new(accept_stream(self.0.clone(), stream, &peer)));
             }
         }
 
