@@ -18,12 +18,7 @@ pub struct IdService {
 }
 
 fn pbetio(e: ProtobufError) -> io::Error {
-    match e {
-        ProtobufError::IoError(error) => error,
-        ProtobufError::WireError(message) => io::Error::new(io::ErrorKind::Other, message),
-        ProtobufError::MessageNotInitialized { message } =>
-            io::Error::new(io::ErrorKind::Other, message),
-    }
+    io::Error::new(io::ErrorKind::Other, e)
 }
 
 fn setup_stream<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> impl Stream<Item=Identify, Error=io::Error> + Sink<SinkItem=Identify, SinkError=io::Error> {
