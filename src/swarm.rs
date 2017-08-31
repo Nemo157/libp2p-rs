@@ -86,20 +86,18 @@ impl Swarm {
         protos
     }
 
-    pub fn add_peer(&mut self, info: PeerInfo) -> impl Future<Item=(), Error=()> {
+    pub fn add_peer(&mut self, info: PeerInfo) {
         println!("Adding peer {:?}", info);
         let peer = Peer::new(self.0.id.clone(), info, self.0.event_loop.clone());
         self.0.peers.borrow_mut().push(peer);
-        future::ok(())
     }
 
-    pub fn add_peers(&mut self, infos: Vec<PeerInfo>) -> impl Future<Item=(), Error=()> {
+    pub fn add_peers(&mut self, infos: Vec<PeerInfo>) {
         println!("Adding peers {:?}", infos);
         let id = self.0.id.clone();
         let event_loop = self.0.event_loop.clone();
         let peers = infos.into_iter().map(|info| Peer::new(id.clone(), info, event_loop.clone()));
         self.0.peers.borrow_mut().extend(peers);
-        future::ok(())
     }
 
     pub fn open_stream(&mut self, id: PeerId, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
