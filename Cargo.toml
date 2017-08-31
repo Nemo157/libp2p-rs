@@ -5,16 +5,19 @@ version = "0.1.0"
 
 [dependencies]
 bytes = "0.4.4"
-futures = "*"
 futures-mpsc = "*"
 futures-spawn = "*"
 maddr = "0.2.0"
 openssl = "*"
+protobuf = "*"
 relay = "*"
 slice_as_array = "1.1.0"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
-protobuf = "*"
+
+[dependencies.futures-await]
+git = "https://github.com/alexcrichton/futures-await"
+optional = false
 
 [dependencies.libp2p-identity]
 path = "../libp2p-identity-rs"

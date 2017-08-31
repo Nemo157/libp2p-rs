@@ -8,7 +8,7 @@ extern crate mhash;
 extern crate multistream;
 extern crate openssl;
 extern crate msgio;
-extern crate futures;
+extern crate futures_await as futures;
 extern crate futures_mpsc;
 extern crate futures_spawn;
 extern crate tokio_core;
