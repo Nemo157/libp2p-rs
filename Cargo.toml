@@ -5,12 +5,8 @@ version = "0.1.0"
 
 [dependencies]
 bytes = "0.4.4"
-futures-mpsc = "*"
-futures-spawn = "*"
 maddr = "0.2.0"
-openssl = "*"
 protobuf = "*"
-relay = "*"
 slice_as_array = "1.1.0"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
@@ -24,10 +20,6 @@ path = "../libp2p-identity-rs"
 
 [dependencies.libp2p-secio]
 path = "../libp2p-secio-rs"
-
-[dependencies.mhash]
-features = ["generation", "validation", "sha2"]
-version = "0.2.0"
 
 [dependencies.mplex]
 path = "../mplex-rs"

@@ -62,7 +62,7 @@ impl IdService {
         Box::new(setup_stream(parts)
             .send(msg)
             .and_then(|stream| stream.into_future().map_err(|(e, _)| e))
-            .and_then(|(msg, stream)| {
+            .and_then(|(msg, _stream)| {
                 println!("idservice msg: {:?}", msg);
                 future::ok(())
             })

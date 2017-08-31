@@ -53,7 +53,7 @@ impl Swarm {
         let listeners: io::Result<Vec<_>> = listen_addresses.iter()
             .map(|addr| transport::listen(addr, &event_loop).map(|transport| Box::new(transport) as Box<_>))
             .collect();
-        let mut swarm = Swarm(Rc::new(State {
+        let swarm = Swarm(Rc::new(State {
             id: id.clone(),
             agent,
             event_loop: event_loop.clone(),
@@ -121,7 +121,7 @@ impl Future for Swarm {
         let mut connected_services = self.0.connected_services.borrow_mut();
         let mut peers = self.0.peers.borrow_mut();
 
-        for mut listener in &mut *self.0.listeners.borrow_mut() {
+        for listener in &mut *self.0.listeners.borrow_mut() {
             while let Async::Ready(Some((conn, addr))) = listener.poll()? {
                 accepting.push(Box::new(Peer::start_accept(
                         self.0.id.clone(),

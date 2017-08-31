@@ -56,7 +56,7 @@ impl EventuallyMultiplexer {
         let mux = stream::iter(addrs.into_iter().map(Ok))
             .and_then(move |addr| transport::connect(&addr, &event_loop))
             .and_then(move |conn| negotiate_stream(conn, host.clone(), peer.clone()))
-            .and_then(move |(id, conn)| negotiate_mux(conn, true))
+            .and_then(move |(_id, conn)| negotiate_mux(conn, true))
             .then(|res| {
                 match res {
                     Ok(mux) => Ok(Some(mux)),

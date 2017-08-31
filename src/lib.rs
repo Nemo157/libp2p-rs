@@ -4,16 +4,11 @@ extern crate bytes;
 pub extern crate libp2p_identity as identity;
 extern crate libp2p_secio as secio;
 extern crate maddr;
-extern crate mhash;
 extern crate multistream;
-extern crate openssl;
 extern crate msgio;
 extern crate futures_await as futures;
-extern crate futures_mpsc;
-extern crate futures_spawn;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate relay;
 extern crate mplex;
 #[macro_use]
 extern crate slice_as_array;
