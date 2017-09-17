@@ -1,5 +1,4 @@
 use std::io;
-use std::cell::RefCell;
 
 use bytes::Bytes;
 use futures::{future, Future, Stream, Sink};
@@ -15,7 +14,7 @@ use service::Service;
 
 pub struct IdService {
     // TODO: Yay RC loop...
-    swarm: RefCell<Option<Swarm>>,
+    swarm: Swarm,
 }
 
 fn pbetio(e: ProtobufError) -> io::Error {
@@ -29,32 +28,28 @@ fn setup_stream<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> i
 }
 
 impl IdService {
-    pub fn new() -> IdService {
-        IdService {
-            swarm: RefCell::new(None),
-        }
-    }
-
-    pub fn update_swarm(&self, swarm: Swarm) {
-        *self.swarm.borrow_mut() = Some(swarm);
+    pub fn new(swarm: Swarm) -> IdService {
+        IdService { swarm }
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
-    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
-        let swarm = if let Some(swarm) = self.swarm.borrow().clone() { swarm } else { panic!("no swarm available") };
+    fn name(&self) -> &'static str {
+        "/ipfs/id/1.0.0"
+    }
 
+    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
         let msg = {
             let mut msg = Identify::new();
             msg.set_protocolVersion("ipfs/0.1.0".to_owned());
-            msg.set_agentVersion(swarm.agent().to_owned());
-            msg.set_publicKey(swarm.id().pub_key().to_protobuf().unwrap()); // TODO: Might not be the right format
-            msg.set_listenAddrs(RepeatedField::from_vec(swarm.listen_addresses().iter().map(|addr| {
+            msg.set_agentVersion(self.swarm.agent().to_owned());
+            msg.set_publicKey(self.swarm.id().pub_key().to_protobuf().unwrap()); // TODO: Might not be the right format
+            msg.set_listenAddrs(RepeatedField::from_vec(self.swarm.listen_addresses().iter().map(|addr| {
                 let mut bytes = Vec::new();
                 bytes.write_multiaddr(addr).unwrap();
                 bytes
             }).collect()));
-            msg.set_protocols(RepeatedField::from_vec(swarm.protocols().iter().map(|&s| s.to_owned()).collect()));
+            msg.set_protocols(RepeatedField::from_vec(self.swarm.protocols().map(|s| s.to_owned()).collect()));
             msg
         };
 

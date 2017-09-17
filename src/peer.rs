@@ -41,7 +41,7 @@ impl Peer {
         self.state.muxmux.id()
     }
 
-    pub fn open_stream(&mut self, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
+    pub fn open_stream(&mut self, protocol: &'static str) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         self.state.muxmux.new_stream()
             .and_then(move |stream| Negotiator::start(stream, true)
                 .negotiate(protocol, move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_,Error=_>> {

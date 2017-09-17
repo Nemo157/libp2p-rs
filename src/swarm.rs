@@ -26,7 +26,7 @@ struct State {
     listen_addresses: Vec<MultiAddr>,
     listeners: RefCell<Vec<Box<Stream<Item=(transport::Transport, MultiAddr), Error=io::Error>>>>,
     accepting: RefCell<Vec<Box<Future<Item=(PeerId, mux::Stream, MultiAddr), Error=io::Error>>>>,
-    id_service: Rc<IdService>,
+    services: RefCell<Vec<Rc<Service<mplex::Stream>>>>,
     accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
     connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
 }
@@ -38,14 +38,10 @@ impl Clone for Swarm {
 }
 
 fn accept_stream(state: Rc<State>, stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
-    let ping = PingService::new();
-    let services: Vec<(&'static [u8], Rc<Service<mplex::Stream>>)> = vec![
-        (b"/ipfs/ping/1.0.0", state.id_service.clone()),
-        (b"/ipfs/id/1.0.0", Rc::new(ping)),
-    ];
     let mut negotiator = Negotiator::start(stream, false);
-    for (name, service) in services {
-        negotiator = negotiator.negotiate(name, move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
+    for service in &*state.services.borrow() {
+        let service = service.clone();
+        negotiator = negotiator.negotiate(service.name(), move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
             Box::new(future::ok(service.accept(parts)))
         });
     }
@@ -65,11 +61,14 @@ impl Swarm {
             listen_addresses: listen_addresses,
             listeners: RefCell::new(listeners?),
             accepting: RefCell::new(Vec::new()),
-            id_service: Rc::new(IdService::new()),
+            services: RefCell::new(Vec::new()),
             accepting_services: RefCell::new(Vec::new()),
             connected_services: RefCell::new(Vec::new()),
         }));
-        swarm.0.id_service.update_swarm(swarm.clone());
+        *swarm.0.services.borrow_mut() = vec![
+            Rc::new(PingService::new()),
+            Rc::new(IdService::new(swarm.clone())),
+        ];
         Ok(swarm)
     }
 
@@ -85,9 +84,8 @@ impl Swarm {
         &self.0.listen_addresses
     }
 
-    pub fn protocols(&self) -> &[&str] {
-        static PROTOS: &[&str] = &["/ipfs/id/1.0.0", "/ipfs/ping/1.0.0"];
-        PROTOS
+    pub fn protocols(&self) -> impl Iterator<Item=&'static str> {
+        self.0.services.borrow().iter().map(|service| service.name()).collect::<Vec<_>>().into_iter()
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) {
@@ -104,7 +102,7 @@ impl Swarm {
         self.0.peers.borrow_mut().extend(peers);
     }
 
-    pub fn open_stream(&mut self, id: PeerId, protocol: &'static [u8]) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
+    pub fn open_stream(&mut self, id: PeerId, protocol: &'static str) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         if let Some(peer) = self.0.peers.borrow_mut().iter_mut().find(|peer| id.matches(&peer.id())) {
             future::Either::A(peer.open_stream(protocol))
         } else {

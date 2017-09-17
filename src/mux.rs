@@ -33,7 +33,7 @@ pub(crate) struct EventuallyMultiplexer {
 fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
     println!("Connected transport, negotiating stream to {:?}", peer);
     Negotiator::start(conn, true)
-        .negotiate(b"/secio/1.0.0", move |parts: FramedParts<Transport>| -> Box<Future<Item=_,Error=_>> {
+        .negotiate("/secio/1.0.0", move |parts: FramedParts<Transport>| -> Box<Future<Item=_,Error=_>> {
             Box::new(secio::handshake(parts, host, peer))
         })
         .finish()
@@ -42,7 +42,7 @@ fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<
 fn negotiate_mux(stream: Stream, initiator: bool) -> impl Future<Item=Mux, Error=io::Error> {
     println!("Connected stream, negotiating mux");
     Negotiator::start(stream, initiator)
-        .negotiate(b"/mplex/6.7.0", |parts: FramedParts<SecStream<Transport>>| -> Box<Future<Item=_, Error=_>> {
+        .negotiate("/mplex/6.7.0", |parts: FramedParts<SecStream<Transport>>| -> Box<Future<Item=_, Error=_>> {
             Box::new(future::ok(mplex::Multiplexer::from_parts(parts, true)))
         })
         .finish()

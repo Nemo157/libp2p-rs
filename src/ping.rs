@@ -21,6 +21,10 @@ impl PingService {
 }
 
 impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
+    fn name(&self) -> &'static str {
+        "/ipfs/ping/1.0.0"
+    }
+
     fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
         Box::new(Framed::from_parts(parts, Codec)
             .into_future()
