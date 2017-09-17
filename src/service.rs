@@ -1,6 +1,8 @@
 use futures::Future;
+use tokio_io::codec::FramedParts;
+use tokio_io::{AsyncRead, AsyncWrite};
 
-trait Service {
-    type Future: Future<Item=(), Error=()>;
-    pub fn accept<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> Self::Future;
+
+pub trait Service<S: AsyncRead + AsyncWrite + 'static> {
+    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static>;
 }

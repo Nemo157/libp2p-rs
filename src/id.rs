@@ -11,10 +11,11 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 use identify::Identify;
 use swarm::Swarm;
+use service::Service;
 
 pub struct IdService {
     // TODO: Yay RC loop...
-    swarm: RefCell<Option<Swarm>>
+    swarm: RefCell<Option<Swarm>>,
 }
 
 fn pbetio(e: ProtobufError) -> io::Error {
@@ -29,14 +30,18 @@ fn setup_stream<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> i
 
 impl IdService {
     pub fn new() -> IdService {
-        IdService { swarm: RefCell::new(None) }
+        IdService {
+            swarm: RefCell::new(None),
+        }
     }
 
     pub fn update_swarm(&self, swarm: Swarm) {
         *self.swarm.borrow_mut() = Some(swarm);
     }
+}
 
-    pub fn accept<S: AsyncRead + AsyncWrite + 'static>(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
+    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
         let swarm = if let Some(swarm) = self.swarm.borrow().clone() { swarm } else { panic!("no swarm available") };
 
         let msg = {

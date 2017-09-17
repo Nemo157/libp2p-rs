@@ -27,6 +27,7 @@ mod mux;
 mod muxmux;
 mod id;
 mod identify;
+mod service;
 
 pub use peerinfo::PeerInfo;
 pub use swarm::Swarm;

@@ -12,10 +12,11 @@ use maddr::MultiAddr;
 
 use { PeerInfo };
 use peer::Peer;
-use ping;
+use ping::PingService;
 use transport;
 use mux;
 use id::IdService;
+use service::Service;
 
 struct State {
     id: HostId,
@@ -25,7 +26,7 @@ struct State {
     listen_addresses: Vec<MultiAddr>,
     listeners: RefCell<Vec<Box<Stream<Item=(transport::Transport, MultiAddr), Error=io::Error>>>>,
     accepting: RefCell<Vec<Box<Future<Item=(PeerId, mux::Stream, MultiAddr), Error=io::Error>>>>,
-    id_service: IdService,
+    id_service: Rc<IdService>,
     accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
     connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
 }
@@ -37,15 +38,18 @@ impl Clone for Swarm {
 }
 
 fn accept_stream(state: Rc<State>, stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
-    // TODO: Have some services to negotiate
-    Negotiator::start(stream, false)
-        .negotiate(b"/ipfs/ping/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
-            Box::new(future::ok(ping::accept(parts)))
-        })
-        .negotiate(b"/ipfs/id/1.0.0", move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
-            Box::new(future::ok(state.id_service.accept(parts)))
-        })
-        .finish()
+    let ping = PingService::new();
+    let services: Vec<(&'static [u8], Rc<Service<mplex::Stream>>)> = vec![
+        (b"/ipfs/ping/1.0.0", state.id_service.clone()),
+        (b"/ipfs/id/1.0.0", Rc::new(ping)),
+    ];
+    let mut negotiator = Negotiator::start(stream, false);
+    for (name, service) in services {
+        negotiator = negotiator.negotiate(name, move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
+            Box::new(future::ok(service.accept(parts)))
+        });
+    }
+    negotiator.finish()
 }
 
 impl Swarm {
@@ -61,7 +65,7 @@ impl Swarm {
             listen_addresses: listen_addresses,
             listeners: RefCell::new(listeners?),
             accepting: RefCell::new(Vec::new()),
-            id_service: IdService::new(),
+            id_service: Rc::new(IdService::new()),
             accepting_services: RefCell::new(Vec::new()),
             connected_services: RefCell::new(Vec::new()),
         }));
@@ -82,8 +86,8 @@ impl Swarm {
     }
 
     pub fn protocols(&self) -> &[&str] {
-        static protos: &[&str] = &["/ipfs/id/1.0.0", "/ipfs/ping/1.0.0"];
-        protos
+        static PROTOS: &[&str] = &["/ipfs/id/1.0.0", "/ipfs/ping/1.0.0"];
+        PROTOS
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) {

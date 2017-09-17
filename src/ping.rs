@@ -5,24 +5,36 @@ use bytes::{BufMut, BytesMut};
 use tokio_io::codec::{Decoder, Encoder, Framed, FramedParts};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+use service::Service;
+
 const PING_LENGTH: usize = 16;
 
 #[derive(Debug)]
 struct Codec;
 
-pub fn accept<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
-    Box::new(Framed::from_parts(parts, Codec)
-        .into_future()
-        .map_err(|(err, _)| err)
-        .and_then(|(ping, stream)| {
-            if let Some(ping) = ping {
-                future::Either::A(stream.send(ping).map(|_| ()))
-            } else {
-                future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Stream closed before receiving ping")))
-            }
-        })
-        .map_err(|err| println!("Error during ping: {:?}", err))
-        .map(|()| println!("Ping successful")))
+pub struct PingService(());
+
+impl PingService {
+    pub fn new() -> PingService {
+        PingService(())
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
+    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+        Box::new(Framed::from_parts(parts, Codec)
+            .into_future()
+            .map_err(|(err, _)| err)
+            .and_then(|(ping, stream)| {
+                if let Some(ping) = ping {
+                    future::Either::A(stream.send(ping).map(|_| ()))
+                } else {
+                    future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Stream closed before receiving ping")))
+                }
+            })
+            .map_err(|err| println!("Error during ping: {:?}", err))
+            .map(|()| println!("Ping successful")))
+    }
 }
 
 impl Decoder for Codec {
