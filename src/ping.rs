@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 
 use futures::{future, Future, Stream, Sink};
@@ -65,5 +66,12 @@ impl Encoder for Codec {
         dst.reserve(PING_LENGTH);
         dst.put(&item[..]);
         Ok(())
+    }
+}
+
+impl fmt::Debug for PingService {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("PingService")
+            .finish()
     }
 }

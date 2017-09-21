@@ -25,7 +25,6 @@ enum State {
     Invalid,
 }
 
-#[derive(Debug)]
 pub(crate) struct EventuallyMultiplexer {
     inner: Rc<RefCell<State>>,
 }
@@ -194,6 +193,32 @@ impl fmt::Debug for State {
             State::Invalid =>
                 f.debug_tuple("State::Invalid")
                     .finish(),
+        }
+    }
+}
+
+impl fmt::Debug for EventuallyMultiplexer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            match *self.inner.borrow() {
+                State::Connecting(_, _) =>
+                    f.debug_tuple("Connecting")
+                        .field(&"_")
+                        .field(&"_")
+                        .finish(),
+                State::Connected(ref mux) =>
+                    mux.fmt(f),
+                State::Disconnected =>
+                    f.debug_tuple("Disconnected")
+                        .finish(),
+                State::Invalid =>
+                    f.debug_tuple("Invalid")
+                        .finish(),
+            }
+        } else {
+            f.debug_struct("EventuallyMultiplexer")
+                .field("inner", &self.inner)
+                .finish()
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 
 use bytes::Bytes;
@@ -62,5 +63,12 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
                 future::ok(())
             })
             .map_err(|err| println!("idservice error: {:?}", err)))
+    }
+}
+
+impl fmt::Debug for IdService {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("IdService")
+            .finish()
     }
 }

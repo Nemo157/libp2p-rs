@@ -1,6 +1,7 @@
+use std::cell::RefCell;
+use std::fmt;
 use std::io;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use futures::{ future, Future, Poll, Async, Stream };
 use tokio_core::reactor;
@@ -196,5 +197,35 @@ impl Future for Swarm {
         }
 
         Ok(Async::NotReady)
+    }
+}
+
+impl fmt::Debug for Swarm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.debug_struct("Swarm")
+                .field("id", &self.0.id)
+                .field("agent", &self.0.agent)
+                .field("peers", &self.0.peers.borrow())
+                .field("listen_addresses", &self.0.listen_addresses)
+                .field("listeners", &self.0.listeners.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("accepting", &self.0.accepting.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("services", &self.0.services.borrow())
+                .field("accepting_services", &self.0.accepting_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("connected_services", &self.0.connected_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .finish()
+        } else {
+            f.debug_struct("Swarm")
+                .field("id", &self.0.id)
+                .field("agent", &self.0.agent)
+                .field("peers", &self.0.peers)
+                .field("listen_addresses", &self.0.listen_addresses)
+                .field("listeners", &self.0.listeners.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("accepting", &self.0.accepting.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("services", &self.0.services)
+                .field("accepting_services", &self.0.accepting_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .field("connected_services", &self.0.connected_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
+                .finish()
+        }
     }
 }

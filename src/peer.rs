@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 use std::rc::Rc;
 
@@ -16,6 +17,7 @@ use mux::Stream;
 use muxmux::MultiplexerSquared;
 use { PeerInfo };
 
+#[derive(Debug)]
 struct State {
     muxmux: MultiplexerSquared,
 }
@@ -61,5 +63,20 @@ impl Peer {
 impl Clone for Peer {
     fn clone(&self) -> Self {
         Peer { state: self.state.clone() }
+    }
+}
+
+impl fmt::Debug for Peer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.debug_struct("Peer")
+                .field("id", &self.state.muxmux.id())
+                .field("muxmux", &self.state.muxmux)
+                .finish()
+        } else {
+            f.debug_struct("Peer")
+                .field("state", &self.state)
+                .finish()
+        }
     }
 }

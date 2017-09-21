@@ -1,6 +1,7 @@
+use std::cell::{Ref, RefCell};
+use std::fmt;
 use std::io;
 use std::rc::Rc;
-use std::cell::{Ref, RefCell};
 
 use maddr::MultiAddr;
 use identity::{ HostId, PeerId };
@@ -75,5 +76,22 @@ impl MultiplexerSquared {
 
     pub(crate) fn new_stream(&self) -> impl Future<Item=mplex::Stream, Error=io::Error> {
         self.choose_mux().new_stream()
+    }
+}
+
+impl fmt::Debug for MultiplexerSquared {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.debug_struct("MultiplexerSquared")
+                .field("muxes", &self.muxes.borrow())
+                .finish()
+        } else {
+            f.debug_struct("MultiplexerSquared")
+                .field("host", &self.host)
+                .field("info", &self.info)
+                .field("event_loop", &self.event_loop)
+                .field("muxes", &self.muxes)
+                .finish()
+        }
     }
 }
