@@ -5,6 +5,7 @@ use maddr::{ MultiAddr, Segment };
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
 use futures::{future, Future, Stream};
+use futures::prelude::{async_block, stream_yield};
 
 #[derive(Debug)]
 pub struct Transport(TcpStream);
@@ -47,11 +48,14 @@ pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<It
 
 pub fn listen(addr: &MultiAddr, event_loop: &reactor::Handle) -> io::Result<impl Stream<Item=(Transport, MultiAddr), Error=io::Error>> {
     let addr = multiaddr_to_socketaddr(addr)?;
-    Ok(TcpListener::bind(&addr, event_loop)?
-        .incoming() 
-        .map(|(transport, addr)| {
+    let listener = TcpListener::bind(&addr, event_loop)?;
+    Ok(async_block! {
+        #[async]
+        for (transport, addr) in listener.incoming() {
             let transport = Transport(transport);
             let addr = MultiAddr::from(addr.ip()) + Segment::Tcp(addr.port());
-            (transport, addr)
-        }))
+            stream_yield!((transport, addr));
+        }
+        Ok(())
+    })
 }

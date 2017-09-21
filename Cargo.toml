@@ -12,8 +12,8 @@ tokio-core = "0.1.8"
 tokio-io = "0.1.2"
 
 [dependencies.futures-await]
-git = "https://github.com/alexcrichton/futures-await"
-optional = false
+git = "https://github.com/Nemo157/futures-await"
+rev = "alternate-signatures"
 
 [dependencies.libp2p-identity]
 path = "../libp2p-identity-rs"

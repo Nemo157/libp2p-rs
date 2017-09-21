@@ -1,4 +1,6 @@
 #![feature(conservative_impl_trait)]
+#![feature(generators)]
+#![feature(proc_macro)]
 
 extern crate bytes;
 pub extern crate libp2p_identity as identity;
