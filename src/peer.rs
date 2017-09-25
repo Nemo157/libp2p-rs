@@ -49,8 +49,8 @@ impl Peer {
     pub fn open_stream<P: AsRef<str>>(self, protocol: P) -> impl Future<Item=FramedParts<mplex::Stream>, Error=io::Error> {
         let stream = await!(self.state.muxmux.new_stream())?;
         let negotiator = Negotiator::start(stream, true)
-            .negotiate(protocol, move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_,Error=_>> {
-                Box::new(future::ok(parts))
+            .negotiate(protocol, move |parts| {
+                parts
             });
         Ok({ await!(negotiator.finish())? })
     }

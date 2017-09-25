@@ -3,6 +3,7 @@ use std::io;
 
 use futures::{future, Future, Stream, Sink};
 use bytes::{BufMut, BytesMut};
+use slice_as_array::slice_to_array_clone;
 use tokio_io::codec::{Decoder, Encoder, Framed, FramedParts};
 use tokio_io::{AsyncRead, AsyncWrite};
 

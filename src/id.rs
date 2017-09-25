@@ -9,7 +9,7 @@ use protobuf::{ProtobufError, Message, parse_from_bytes, RepeatedField};
 use tokio_io::codec::{Framed, FramedParts};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-use identify::Identify;
+use pb::identify::Identify;
 use swarm::Swarm;
 use service::Service;
 

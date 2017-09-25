@@ -8,6 +8,7 @@ bytes = "0.4.4"
 maddr = "0.2.0"
 protobuf = "1.4.1"
 slice_as_array = "1.1.0"
+slog = "2.0.12"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
 

@@ -3,6 +3,8 @@ use std::fmt;
 use std::io;
 use std::rc::Rc;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{info, o, Logger};
 use futures::{ future, Future, Poll, Async, Stream };
 use tokio_core::reactor;
 use identity::{ HostId, PeerId };
@@ -18,8 +20,10 @@ use transport;
 use mux;
 use id::IdService;
 use service::Service;
+use dht::DhtService;
 
 struct State {
+    logger: Logger,
     id: HostId,
     agent: String,
     event_loop: reactor::Handle,
@@ -38,25 +42,30 @@ impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
 }
 
-fn accept_stream(state: Rc<State>, stream: mplex::Stream, _peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
+fn accept_stream(state: Rc<State>, stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
     let mut negotiator = Negotiator::start(stream, false);
     for service in &*state.services.borrow() {
         let service = service.clone();
-        negotiator = negotiator.negotiate(service.name(), move |parts: FramedParts<mplex::Stream>| -> Box<Future<Item=_, Error=_>> {
-            Box::new(future::ok(service.accept(parts)))
+        let peer_id = peer.id();
+        let logger = state.logger.new(o!());
+        negotiator = negotiator.negotiate(service.name(), move |parts| {
+            Box::new(service.accept(parts).then(move |result| {
+                info!(logger, "Service {:?} to peer {:?} done: {:?}", service, peer_id, result);
+                future::ok(())
+            })) as Box<Future<Item=(), Error=()>>
         });
     }
     negotiator.finish()
 }
 
 impl Swarm {
-    pub fn new(id: HostId, agent: String, listen_addresses: Vec<MultiAddr>, event_loop: reactor::Handle) -> io::Result<Swarm> {
+    pub fn new(logger: Logger, id: HostId, agent: String, listen_addresses: Vec<MultiAddr>, event_loop: reactor::Handle) -> io::Result<Swarm> {
+        let logger = logger.new(o!("host" => id.hash().to_string()));
         let listeners: io::Result<Vec<_>> = listen_addresses.iter()
             .map(|addr| transport::listen(addr, &event_loop).map(|transport| Box::new(transport) as Box<_>))
             .collect();
         let swarm = Swarm(Rc::new(State {
-            id: id.clone(),
-            agent,
+            logger, id, agent,
             event_loop: event_loop.clone(),
             peers: RefCell::new(Vec::new()),
             listen_addresses: listen_addresses,
@@ -69,6 +78,7 @@ impl Swarm {
         *swarm.0.services.borrow_mut() = vec![
             Rc::new(PingService::new()),
             Rc::new(IdService::new(swarm.clone())),
+            Rc::new(DhtService::new(swarm.clone())),
         ];
         Ok(swarm)
     }
@@ -90,13 +100,13 @@ impl Swarm {
     }
 
     pub fn add_peer(&mut self, info: PeerInfo) {
-        println!("Adding peer {:?}", info);
+        info!(self.0.logger, "Adding peer {:?}", info);
         let peer = Peer::new(self.0.id.clone(), info, self.0.event_loop.clone());
         self.0.peers.borrow_mut().push(peer);
     }
 
     pub fn add_peers(&mut self, infos: Vec<PeerInfo>) {
-        println!("Adding peers {:?}", infos);
+        info!(self.0.logger, "Adding peers {:?}", infos);
         let id = self.0.id.clone();
         let event_loop = self.0.event_loop.clone();
         let peers = infos.into_iter().map(|info| Peer::new(id.clone(), info, event_loop.clone()));
@@ -122,8 +132,10 @@ impl Future for Swarm {
         let mut connected_services = self.0.connected_services.borrow_mut();
         let mut peers = self.0.peers.borrow_mut();
 
+        info!(self.0.logger, "Checking listeners");
         for listener in &mut *self.0.listeners.borrow_mut() {
             while let Async::Ready(Some((conn, addr))) = listener.poll()? {
+                info!(self.0.logger, "New connection from {}", addr);
                 accepting.push(Box::new(Peer::start_accept(
                         self.0.id.clone(),
                         conn,
@@ -131,11 +143,13 @@ impl Future for Swarm {
             }
         }
 
+        info!(self.0.logger, "Checking accepting");
         {
             let mut i = 0;
             while i < accepting.len() {
                 match accepting[i].poll() {
                     Ok(Async::Ready((id, conn, addr))) => {
+                        info!(self.0.logger, "Finished accepting for {}", addr);
                         accepting.swap_remove(i);
                         if let Some(peer) = peers.iter_mut().find(|peer| peer.id().matches(&id)) {
                             peer.finish_accept(conn, addr);
@@ -150,24 +164,28 @@ impl Future for Swarm {
                         i += 1;
                     }
                     Err(err) => {
-                        println!("Error while accepting peers stream: {:?}", err);
+                        info!(self.0.logger, "Error while accepting peers stream: {:?}", err);;
                         accepting.swap_remove(i);
                     }
                 }
             }
         }
 
+        info!(self.0.logger, "Checking peers");
         for peer in peers.iter_mut() {
             while let Async::Ready(Some(stream)) = peer.poll_accept()? {
+                info!(self.0.logger, "Accepting new stream");
                 accepting_services.push(Box::new(accept_stream(self.0.clone(), stream, &peer)));
             }
         }
 
+        info!(self.0.logger, "Checking accepting services");
         {
             let mut i = 0;
             while i < accepting_services.len() {
                 match accepting_services[i].poll() {
                     Ok(Async::Ready(service)) => {
+                        info!(self.0.logger, "Accepted service");
                         accepting_services.swap_remove(i);
                         connected_services.push(service);
                     }
@@ -175,18 +193,20 @@ impl Future for Swarm {
                         i += 1;
                     }
                     Err(err) => {
-                        println!("Error while accepting peers muxed stream: {:?}", err);
+                        info!(self.0.logger, "Error while accepting peers muxed stream: {:?}", err);
                         accepting_services.swap_remove(i);
                     }
                 }
             }
         }
 
+        info!(self.0.logger, "Checking connected services");
         {
             let mut i = 0;
             while i < connected_services.len() {
                 match connected_services[i].poll() {
                     Ok(Async::Ready(())) | Err(()) => {
+                        info!(self.0.logger, "Connected service done");
                         connected_services.swap_remove(i);
                     }
                     Ok(Async::NotReady) => {
@@ -196,6 +216,7 @@ impl Future for Swarm {
             }
         }
 
+        info!(self.0.logger, "Finished checking swarm");
         Ok(Async::NotReady)
     }
 }
