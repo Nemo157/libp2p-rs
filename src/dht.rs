@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, o, Logger};
 use bytes::Bytes;
 use futures::{future, Future, Stream, Sink};
 use msgio;
@@ -29,9 +31,7 @@ fn setup_stream<S: AsyncRead + AsyncWrite + 'static>(parts: FramedParts<S>) -> i
 
 impl DhtService {
     pub fn new(swarm: Swarm) -> DhtService {
-        DhtService {
-            swarm
-        }
+        DhtService { swarm }
     }
 }
 
@@ -40,13 +40,15 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for DhtService {
         "/ipfs/kad/1.0.0"
     }
 
-    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
-        Box::new(setup_stream(parts)
-            .for_each(|msg| {
-                println!("kad msg: {:?}", msg);
-                future::ok(())
-            })
-            .map_err(|err| println!("kad error: {:?}", err)))
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+        Box::new({
+            let logger = logger.clone();
+            setup_stream(parts)
+                .for_each(move |msg| {
+                    info!(logger, "kad msg: {:?}", msg);
+                    future::ok(())
+                })
+        }.map_err(move |err| error!(logger, "kad error: {:?}", err)))
     }
 }
 

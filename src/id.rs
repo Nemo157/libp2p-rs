@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, o, Logger};
 use bytes::Bytes;
 use futures::{future, Future, Stream, Sink};
 use msgio;
@@ -39,7 +41,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
         "/ipfs/id/1.0.0"
     }
 
-    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
         let msg = {
             let mut msg = Identify::new();
             msg.set_protocolVersion("ipfs/0.1.0".to_owned());
@@ -55,14 +57,16 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
         };
 
         // stream consists of protobuf encoded messages with a varint length prefix
-        Box::new(setup_stream(parts)
+        Box::new({
+            let logger = logger.clone();
+            setup_stream(parts)
             .send(msg)
             .and_then(|stream| stream.into_future().map_err(|(e, _)| e))
-            .and_then(|(msg, _stream)| {
-                println!("idservice msg: {:?}", msg);
+            .and_then(move |(msg, _stream)| {
+                info!(logger, "idservice msg: {:?}", msg);
                 future::ok(())
             })
-            .map_err(|err| println!("idservice error: {:?}", err)))
+        }.map_err(move |err| error!(logger, "idservice error: {:?}", err)))
     }
 }
 

@@ -2,6 +2,8 @@ use std::{fmt, io, mem};
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, o, Logger};
 use multistream::Negotiator;
 use secio::{ self, SecStream };
 use identity::{ HostId, PeerId };
@@ -26,11 +28,12 @@ enum State {
 }
 
 pub(crate) struct EventuallyMultiplexer {
+    logger: Logger,
     inner: Rc<RefCell<State>>,
 }
 
-fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
-    println!("Connected transport, negotiating stream to {:?}", peer);
+fn negotiate_stream(logger: Logger, conn: Transport, host: HostId, peer: PeerId) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
+    info!(logger, "Connected transport, negotiating stream");
     Negotiator::start(conn, true)
         .negotiate("/secio/1.0.0", move |parts: FramedParts<Transport>| {
             secio::handshake(parts, host, peer)
@@ -39,8 +42,8 @@ fn negotiate_stream(conn: Transport, host: HostId, peer: PeerId) -> impl Future<
         .flatten()
 }
 
-fn negotiate_mux(stream: Stream, initiator: bool) -> impl Future<Item=Mux, Error=io::Error> {
-    println!("Connected stream, negotiating mux");
+fn negotiate_mux(logger: Logger, stream: Stream, initiator: bool) -> impl Future<Item=Mux, Error=io::Error> {
+    info!(logger, "Connected stream, negotiating mux");
     Negotiator::start(stream, initiator)
         .negotiate("/mplex/6.7.0", |parts: FramedParts<SecStream<Transport>>| {
             mplex::Multiplexer::from_parts(parts, true)
@@ -49,50 +52,62 @@ fn negotiate_mux(stream: Stream, initiator: bool) -> impl Future<Item=Mux, Error
 }
 
 impl EventuallyMultiplexer {
-    pub(crate) fn connect(host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> EventuallyMultiplexer {
-        println!("Connecting mux for {:?}", info);
+    pub(crate) fn connect(logger: Logger, host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> EventuallyMultiplexer {
+        let logger = logger.new(o!("peer" => format!("{:#?}", info.id())));
+        info!(logger, "Connecting mux");
         let addrs = info.addrs.clone();
         let peer = info.id.clone();
-        let mux = stream::iter(addrs.into_iter().map(Ok))
-            .and_then(move |addr| transport::connect(&addr, &event_loop))
-            .and_then(move |conn| negotiate_stream(conn, host.clone(), peer.clone()))
-            .and_then(move |(_id, conn)| negotiate_mux(conn, true))
-            .then(|res| {
-                match res {
-                    Ok(mux) => Ok(Some(mux)),
-                    Err(err) => {
-                        println!("Error connecting to peer: {:?}", err);
-                        Ok(None)
+        let mux = {
+            let logger = logger.clone();
+            {
+                let logger = logger.clone();
+                {
+                    let logger = logger.clone();
+                    stream::iter(addrs.into_iter().map(Ok))
+                        .and_then(move |addr| transport::connect(&addr, &event_loop))
+                        .and_then(move |conn| negotiate_stream(logger.clone(), conn, host.clone(), peer.clone()))
+                }
+                    .and_then(move |(_id, conn)| negotiate_mux(logger.clone(), conn, true))
+            }
+                .then(move |res| {
+                    match res {
+                        Ok(mux) => Ok(Some(mux)),
+                        Err(err) => {
+                            error!(logger, "Error connecting to peer: {:?}", err);
+                            Ok(None)
+                        }
                     }
-                }
-            })
-            .filter_map(|mux| mux)
-            .into_future()
-            .map_err(|(err, _): (io::Error, _)| err)
-            .and_then(|(mux, _)| {
-                match mux {
-                    Some(mux) => Ok(mux),
-                    None => Err(io::Error::new(io::ErrorKind::Other, "Could not connect to any peer addresses"))
-                }
-            });
+                })
+                .filter_map(|mux| mux)
+                .into_future()
+                .map_err(|(err, _): (io::Error, _)| err)
+                .and_then(|(mux, _)| {
+                    match mux {
+                        Some(mux) => Ok(mux),
+                        None => Err(io::Error::new(io::ErrorKind::Other, "Could not connect to any peer addresses"))
+                    }
+                })
+        };
         EventuallyMultiplexer {
+            logger,
             inner: Rc::new(RefCell::new(State::Connecting(Box::new(mux), Vec::new())))
         }
     }
 
-    pub(crate) fn start_accept(host: HostId, conn: Transport) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
-        negotiate_stream(conn, host, PeerId::Unknown)
+    pub(crate) fn start_accept(logger: Logger, host: HostId, conn: Transport) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
+        negotiate_stream(logger, conn, host, PeerId::Unknown)
     }
 
-    pub(crate) fn finish_accept(conn: Stream) -> EventuallyMultiplexer {
-        let mux = negotiate_mux(conn, false);
+    pub(crate) fn finish_accept(logger: Logger, conn: Stream) -> EventuallyMultiplexer {
+        let mux = negotiate_mux(logger.clone(), conn, false);
         EventuallyMultiplexer {
+            logger,
             inner: Rc::new(RefCell::new(State::Connecting(Box::new(mux), Vec::new())))
         }
     }
 
     pub(crate) fn poll_accept(&self) -> Poll<Option<mplex::Stream>, io::Error> {
-        self.inner.borrow_mut().poll_accept()
+        self.inner.borrow_mut().poll_accept(&self.logger)
     }
 
     pub(crate) fn new_stream(&self) -> impl Future<Item=mplex::Stream, Error=io::Error> {
@@ -135,7 +150,7 @@ impl State {
         }
     }
 
-    fn poll_accept(&mut self) -> Poll<Option<mplex::Stream>, io::Error> {
+    fn poll_accept(&mut self, logger: &Logger) -> Poll<Option<mplex::Stream>, io::Error> {
         loop {
             match mem::replace(self, State::Invalid) {
                 State::Connecting(mut attempt, awaiting) => {
@@ -155,7 +170,7 @@ impl State {
                 State::Connected(mut mux) => {
                     let res = mux.poll();
                     if let Ok(Async::Ready(Some(ref stream))) = res {
-                        println!("New incoming muxed stream {:?} for peer", stream);
+                        info!(logger, "New incoming muxed stream");
                     }
                     *self = if let Ok(Async::Ready(None)) = res {
                         State::Disconnected

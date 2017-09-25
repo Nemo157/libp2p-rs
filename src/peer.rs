@@ -2,6 +2,8 @@ use std::fmt;
 use std::io;
 use std::rc::Rc;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, o, Logger};
 use maddr::MultiAddr;
 use multistream::Negotiator;
 use identity::{ HostId, PeerId };
@@ -19,22 +21,23 @@ use { PeerInfo };
 
 #[derive(Debug)]
 struct State {
+    logger: Logger,
     muxmux: MultiplexerSquared,
 }
 
 pub struct Peer { state: Rc<State> }
 
 impl Peer {
-    pub(crate) fn new(host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> Peer {
-        println!("New peer {:?}", info);
-        let muxmux = MultiplexerSquared::new(host, info, event_loop);
-        Peer { state: Rc::new(State { muxmux }) }
+    pub(crate) fn new(logger: Logger, host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> Peer {
+        let logger = logger.new(o!("peer" => format!("{:#?}", info.id())));
+        info!(logger, "New peer {:?}", info);
+        let muxmux = MultiplexerSquared::new(logger.clone(), host, info, event_loop);
+        Peer { state: Rc::new(State { logger, muxmux }) }
     }
 
-    #[async]
-    pub(crate) fn start_accept(host: HostId, conn: Transport, addr: MultiAddr) -> impl Future<Item=(PeerId, Stream, MultiAddr), Error=io::Error> {
-        let (id, conn) = await!(MultiplexerSquared::start_accept(host, conn))?;
-        Ok((id, conn, addr))
+    pub(crate) fn start_accept(logger: Logger, host: HostId, conn: Transport, addr: MultiAddr) -> impl Future<Item=(PeerId, Stream, MultiAddr), Error=io::Error> {
+        MultiplexerSquared::start_accept(logger, host, conn)
+            .map(move |(id, conn)| (id, conn, addr))
     }
 
     pub(crate) fn finish_accept(&mut self, conn: Stream, addr: MultiAddr) {

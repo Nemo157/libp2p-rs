@@ -3,6 +3,8 @@ use std::fmt;
 use std::io;
 use std::rc::Rc;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, warn, o, Logger};
 use maddr::MultiAddr;
 use identity::{ HostId, PeerId };
 use tokio_core::reactor;
@@ -15,6 +17,7 @@ use transport::Transport;
 use mux::{ Stream, EventuallyMultiplexer };
 
 pub(crate) struct MultiplexerSquared {
+    logger: Logger,
     host: HostId,
     info: PeerInfo,
     event_loop: reactor::Handle,
@@ -22,18 +25,19 @@ pub(crate) struct MultiplexerSquared {
 }
 
 impl MultiplexerSquared {
-    pub(crate) fn new(host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> MultiplexerSquared {
+    pub(crate) fn new(logger: Logger, host: HostId, info: PeerInfo, event_loop: reactor::Handle) -> MultiplexerSquared {
         let muxes = Rc::new(RefCell::new(Vec::new()));
-        MultiplexerSquared { host, info, event_loop, muxes }
+        MultiplexerSquared { logger, host, info, event_loop, muxes }
     }
 
-    pub(crate) fn start_accept(host: HostId, conn: Transport) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
-        EventuallyMultiplexer::start_accept(host, conn)
+    pub(crate) fn start_accept(logger: Logger, host: HostId, conn: Transport) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
+        EventuallyMultiplexer::start_accept(logger, host, conn)
     }
 
     pub(crate) fn finish_accept(&self, conn: Stream, addr: MultiAddr) {
-        println!("muxmux::finish_accept on {} for {:?}", addr, self.info.id);
-        let mux = EventuallyMultiplexer::finish_accept(conn);
+        let logger = self.logger.new(o!("addr" => addr.to_string()));
+        info!(logger, "muxmux::finish_accept");
+        let mux = EventuallyMultiplexer::finish_accept(logger, conn);
         self.muxes.borrow_mut().push(mux);
     }
 
@@ -50,14 +54,14 @@ impl MultiplexerSquared {
                     return Ok(Async::Ready(Some(conn)));
                 }
                 Ok(Async::Ready(None)) => {
-                    println!("Multiplexer {:?} to peer {:?} closed", muxes[i], self.info.id);
+                    info!(self.logger, "Multiplexer {:?} to closed", muxes[i]);
                     muxes.swap_remove(i);
                 }
                 Ok(Async::NotReady) => {
                     i += 1;
                 }
                 Err(err) => {
-                    println!("Error on multiplexer {:?} to peer {:?}: {:?}", muxes[i], self.info.id, err);
+                    error!(self.logger, "Error on multiplexer {:?}: {:?}", muxes[i], err);
                     muxes.swap_remove(i);
                 }
             }
@@ -67,8 +71,8 @@ impl MultiplexerSquared {
 
     fn choose_mux(&self) -> Ref<EventuallyMultiplexer> {
         if { self.muxes.borrow().is_empty() } {
-            println!("No existing mux to {:?}", self.info);
-            let mux = EventuallyMultiplexer::connect(self.host.clone(), self.info.clone(), self.event_loop.clone());
+            warn!(self.logger, "No existing mux");
+            let mux = EventuallyMultiplexer::connect(self.logger.clone(), self.host.clone(), self.info.clone(), self.event_loop.clone());
             self.muxes.borrow_mut().push(mux);
         }
         Ref::map(self.muxes.borrow(), |muxes| muxes.iter().next().unwrap())

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io;
 
+use slog::{b, log, kv, record, record_static};
+use slog::{error, info, o, Logger};
 use futures::{future, Future, Stream, Sink};
 use bytes::{BufMut, BytesMut};
 use slice_as_array::slice_to_array_clone;
@@ -27,7 +29,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
         "/ipfs/ping/1.0.0"
     }
 
-    fn accept(&self, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
         Box::new(Framed::from_parts(parts, Codec)
             .into_future()
             .map_err(|(err, _)| err)
@@ -38,8 +40,16 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
                     future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Stream closed before receiving ping")))
                 }
             })
-            .map_err(|err| println!("Error during ping: {:?}", err))
-            .map(|()| println!("Ping successful")))
+            .then(move |res| match res {
+                Err(err) => {
+                    error!(logger, "Error during ping: {:?}", err);
+                    Err(())
+                }
+                Ok(()) => {
+                    info!(logger, "Ping successful");
+                    Ok(())
+                }
+            }))
     }
 }
 
