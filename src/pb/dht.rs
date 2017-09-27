@@ -26,7 +26,7 @@ pub struct Message {
     // message fields
     field_type: ::std::option::Option<Message_MessageType>,
     clusterLevelRaw: ::std::option::Option<i32>,
-    key: ::protobuf::SingularField<::std::string::String>,
+    key: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     record: ::protobuf::SingularPtrField<super::record::Record>,
     closerPeers: ::protobuf::RepeatedField<Message_Peer>,
     providerPeers: ::protobuf::RepeatedField<Message_Peer>,
@@ -107,7 +107,7 @@ impl Message {
         &mut self.clusterLevelRaw
     }
 
-    // optional string key = 2;
+    // optional bytes key = 2;
 
     pub fn clear_key(&mut self) {
         self.key.clear();
@@ -118,13 +118,13 @@ impl Message {
     }
 
     // Param is passed by value, moved
-    pub fn set_key(&mut self, v: ::std::string::String) {
+    pub fn set_key(&mut self, v: ::std::vec::Vec<u8>) {
         self.key = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_key(&mut self) -> &mut ::std::string::String {
+    pub fn mut_key(&mut self) -> &mut ::std::vec::Vec<u8> {
         if self.key.is_none() {
             self.key.set_default();
         }
@@ -132,22 +132,22 @@ impl Message {
     }
 
     // Take field
-    pub fn take_key(&mut self) -> ::std::string::String {
-        self.key.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_key(&mut self) -> ::std::vec::Vec<u8> {
+        self.key.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
-    pub fn get_key(&self) -> &str {
+    pub fn get_key(&self) -> &[u8] {
         match self.key.as_ref() {
             Some(v) => &v,
-            None => "",
+            None => &[],
         }
     }
 
-    fn get_key_for_reflect(&self) -> &::protobuf::SingularField<::std::string::String> {
+    fn get_key_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
         &self.key
     }
 
-    fn mut_key_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::string::String> {
+    fn mut_key_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
         &mut self.key
     }
 
@@ -298,7 +298,7 @@ impl ::protobuf::Message for Message {
                     self.clusterLevelRaw = ::std::option::Option::Some(tmp);
                 },
                 2 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.key)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key)?;
                 },
                 3 => {
                     ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.record)?;
@@ -328,7 +328,7 @@ impl ::protobuf::Message for Message {
             my_size += ::protobuf::rt::value_size(10, v, ::protobuf::wire_format::WireTypeVarint);
         }
         if let Some(ref v) = self.key.as_ref() {
-            my_size += ::protobuf::rt::string_size(2, &v);
+            my_size += ::protobuf::rt::bytes_size(2, &v);
         }
         if let Some(ref v) = self.record.as_ref() {
             let len = v.compute_size();
@@ -355,7 +355,7 @@ impl ::protobuf::Message for Message {
             os.write_int32(10, v)?;
         }
         if let Some(ref v) = self.key.as_ref() {
-            os.write_string(2, &v)?;
+            os.write_bytes(2, &v)?;
         }
         if let Some(ref v) = self.record.as_ref() {
             os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
@@ -426,7 +426,7 @@ impl ::protobuf::MessageStatic for Message {
                     Message::get_clusterLevelRaw_for_reflect,
                     Message::mut_clusterLevelRaw_for_reflect,
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "key",
                     Message::get_key_for_reflect,
                     Message::mut_key_for_reflect,
@@ -483,7 +483,7 @@ impl ::protobuf::reflect::ProtobufValue for Message {
 #[derive(PartialEq,Clone,Default)]
 pub struct Message_Peer {
     // message fields
-    id: ::protobuf::SingularField<::std::string::String>,
+    id: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     addrs: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
     connection: ::std::option::Option<Message_ConnectionType>,
     // special fields
@@ -509,7 +509,7 @@ impl Message_Peer {
         }
     }
 
-    // optional string id = 1;
+    // optional bytes id = 1;
 
     pub fn clear_id(&mut self) {
         self.id.clear();
@@ -520,13 +520,13 @@ impl Message_Peer {
     }
 
     // Param is passed by value, moved
-    pub fn set_id(&mut self, v: ::std::string::String) {
+    pub fn set_id(&mut self, v: ::std::vec::Vec<u8>) {
         self.id = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_id(&mut self) -> &mut ::std::string::String {
+    pub fn mut_id(&mut self) -> &mut ::std::vec::Vec<u8> {
         if self.id.is_none() {
             self.id.set_default();
         }
@@ -534,22 +534,22 @@ impl Message_Peer {
     }
 
     // Take field
-    pub fn take_id(&mut self) -> ::std::string::String {
-        self.id.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_id(&mut self) -> ::std::vec::Vec<u8> {
+        self.id.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
-    pub fn get_id(&self) -> &str {
+    pub fn get_id(&self) -> &[u8] {
         match self.id.as_ref() {
             Some(v) => &v,
-            None => "",
+            None => &[],
         }
     }
 
-    fn get_id_for_reflect(&self) -> &::protobuf::SingularField<::std::string::String> {
+    fn get_id_for_reflect(&self) -> &::protobuf::SingularField<::std::vec::Vec<u8>> {
         &self.id
     }
 
-    fn mut_id_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::string::String> {
+    fn mut_id_for_reflect(&mut self) -> &mut ::protobuf::SingularField<::std::vec::Vec<u8>> {
         &mut self.id
     }
 
@@ -624,7 +624,7 @@ impl ::protobuf::Message for Message_Peer {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.id)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id)?;
                 },
                 2 => {
                     ::protobuf::rt::read_repeated_bytes_into(wire_type, is, &mut self.addrs)?;
@@ -649,7 +649,7 @@ impl ::protobuf::Message for Message_Peer {
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
         if let Some(ref v) = self.id.as_ref() {
-            my_size += ::protobuf::rt::string_size(1, &v);
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         }
         for value in &self.addrs {
             my_size += ::protobuf::rt::bytes_size(2, &value);
@@ -664,7 +664,7 @@ impl ::protobuf::Message for Message_Peer {
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(ref v) = self.id.as_ref() {
-            os.write_string(1, &v)?;
+            os.write_bytes(1, &v)?;
         }
         for v in &self.addrs {
             os.write_bytes(2, &v)?;
@@ -716,7 +716,7 @@ impl ::protobuf::MessageStatic for Message_Peer {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "id",
                     Message_Peer::get_id_for_reflect,
                     Message_Peer::mut_id_for_reflect,
@@ -882,21 +882,21 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \n\tdht.proto\x12\x06dht.pb\x1a\x0crecord.proto\"\xc7\x04\n\x07Message\
     \x12/\n\x04type\x18\x01\x20\x01(\x0e2\x1b.dht.pb.Message.MessageTypeR\
     \x04type\x12(\n\x0fclusterLevelRaw\x18\n\x20\x01(\x05R\x0fclusterLevelRa\
-    w\x12\x10\n\x03key\x18\x02\x20\x01(\tR\x03key\x12)\n\x06record\x18\x03\
+    w\x12\x10\n\x03key\x18\x02\x20\x01(\x0cR\x03key\x12)\n\x06record\x18\x03\
     \x20\x01(\x0b2\x11.record.pb.RecordR\x06record\x126\n\x0bcloserPeers\x18\
     \x08\x20\x03(\x0b2\x14.dht.pb.Message.PeerR\x0bcloserPeers\x12:\n\rprovi\
     derPeers\x18\t\x20\x03(\x0b2\x14.dht.pb.Message.PeerR\rproviderPeers\x1a\
-    l\n\x04Peer\x12\x0e\n\x02id\x18\x01\x20\x01(\tR\x02id\x12\x14\n\x05addrs\
-    \x18\x02\x20\x03(\x0cR\x05addrs\x12>\n\nconnection\x18\x03\x20\x01(\x0e2\
-    \x1e.dht.pb.Message.ConnectionTypeR\nconnection\"i\n\x0bMessageType\x12\
-    \r\n\tPUT_VALUE\x10\0\x12\r\n\tGET_VALUE\x10\x01\x12\x10\n\x0cADD_PROVID\
-    ER\x10\x02\x12\x11\n\rGET_PROVIDERS\x10\x03\x12\r\n\tFIND_NODE\x10\x04\
-    \x12\x08\n\x04PING\x10\x05\"W\n\x0eConnectionType\x12\x11\n\rNOT_CONNECT\
-    ED\x10\0\x12\r\n\tCONNECTED\x10\x01\x12\x0f\n\x0bCAN_CONNECT\x10\x02\x12\
-    \x12\n\x0eCANNOT_CONNECT\x10\x03J\xa3\x14\n\x06\x12\x04\x07\0E\x01\n\xe1\
-    \x03\n\x01\x0c\x12\x03\x07\0\x122\xd6\x03\x20In\x20order\x20to\x20re-gen\
-    erate\x20the\x20golang\x20packages\x20for\x20`Message`\x20you\x20will\
-    \x20need...\n\x201.\x20Protobuf\x20binary\x20(tested\x20with\x20protoc\
+    l\n\x04Peer\x12\x0e\n\x02id\x18\x01\x20\x01(\x0cR\x02id\x12\x14\n\x05add\
+    rs\x18\x02\x20\x03(\x0cR\x05addrs\x12>\n\nconnection\x18\x03\x20\x01(\
+    \x0e2\x1e.dht.pb.Message.ConnectionTypeR\nconnection\"i\n\x0bMessageType\
+    \x12\r\n\tPUT_VALUE\x10\0\x12\r\n\tGET_VALUE\x10\x01\x12\x10\n\x0cADD_PR\
+    OVIDER\x10\x02\x12\x11\n\rGET_PROVIDERS\x10\x03\x12\r\n\tFIND_NODE\x10\
+    \x04\x12\x08\n\x04PING\x10\x05\"W\n\x0eConnectionType\x12\x11\n\rNOT_CON\
+    NECTED\x10\0\x12\r\n\tCONNECTED\x10\x01\x12\x0f\n\x0bCAN_CONNECT\x10\x02\
+    \x12\x12\n\x0eCANNOT_CONNECT\x10\x03J\xa3\x14\n\x06\x12\x04\x07\0E\x01\n\
+    \xe1\x03\n\x01\x0c\x12\x03\x07\0\x122\xd6\x03\x20In\x20order\x20to\x20re\
+    -generate\x20the\x20golang\x20packages\x20for\x20`Message`\x20you\x20wil\
+    l\x20need...\n\x201.\x20Protobuf\x20binary\x20(tested\x20with\x20protoc\
     \x203.0.0).\x20-\x20https://github.com/gogo/protobuf/releases\n\x202.\
     \x20Gogo\x20Protobuf\x20(tested\x20with\x20gogo\x200.3).\x20-\x20https:/\
     /github.com/gogo/protobuf\n\x203.\x20To\x20have\x20cloned\x20`libp2p/go-\
@@ -939,10 +939,10 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x04\0\x04\x01\x02\x03\x01\x12\x03\"\x10\x1e\n\x0e\n\x07\x04\0\x04\x01\
     \x02\x03\x02\x12\x03\"!\"\n\x0c\n\x04\x04\0\x03\0\x12\x04%\x08.\t\n\x0c\
     \n\x05\x04\0\x03\0\x01\x12\x03%\x10\x14\n$\n\x06\x04\0\x03\0\x02\0\x12\
-    \x03'\x10'\x1a\x15\x20ID\x20of\x20a\x20given\x20peer.\n\n\x0e\n\x07\x04\
+    \x03'\x10&\x1a\x15\x20ID\x20of\x20a\x20given\x20peer.\n\n\x0e\n\x07\x04\
     \0\x03\0\x02\0\x04\x12\x03'\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\0\x05\
-    \x12\x03'\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\0\x01\x12\x03'\x20\"\n\x0e\
-    \n\x07\x04\0\x03\0\x02\0\x03\x12\x03'%&\n,\n\x06\x04\0\x03\0\x02\x01\x12\
+    \x12\x03'\x19\x1e\n\x0e\n\x07\x04\0\x03\0\x02\0\x01\x12\x03'\x1f!\n\x0e\
+    \n\x07\x04\0\x03\0\x02\0\x03\x12\x03'$%\n,\n\x06\x04\0\x03\0\x02\x01\x12\
     \x03*\x10)\x1a\x1d\x20multiaddrs\x20for\x20a\x20given\x20peer\n\n\x0e\n\
     \x07\x04\0\x03\0\x02\x01\x04\x12\x03*\x10\x18\n\x0e\n\x07\x04\0\x03\0\
     \x02\x01\x05\x12\x03*\x19\x1e\n\x0e\n\x07\x04\0\x03\0\x02\x01\x01\x12\
@@ -960,12 +960,12 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     nse\x20belongs\x20to.\n\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x034\x08\x10\n\
     \x0c\n\x05\x04\0\x02\x01\x05\x12\x034\x11\x16\n\x0c\n\x05\x04\0\x02\x01\
     \x01\x12\x034\x17&\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x034)+\nw\n\x04\x04\
-    \0\x02\x02\x12\x038\x08\x20\x1aj\x20Used\x20to\x20specify\x20the\x20key\
+    \0\x02\x02\x12\x038\x08\x1f\x1aj\x20Used\x20to\x20specify\x20the\x20key\
     \x20associated\x20with\x20this\x20message.\n\x20PUT_VALUE,\x20GET_VALUE,\
     \x20ADD_PROVIDER,\x20GET_PROVIDERS\n\n\x0c\n\x05\x04\0\x02\x02\x04\x12\
-    \x038\x08\x10\n\x0c\n\x05\x04\0\x02\x02\x05\x12\x038\x11\x17\n\x0c\n\x05\
-    \x04\0\x02\x02\x01\x12\x038\x18\x1b\n\x0c\n\x05\x04\0\x02\x02\x03\x12\
-    \x038\x1e\x1f\n;\n\x04\x04\0\x02\x03\x12\x03<\x08-\x1a.\x20Used\x20to\
+    \x038\x08\x10\n\x0c\n\x05\x04\0\x02\x02\x05\x12\x038\x11\x16\n\x0c\n\x05\
+    \x04\0\x02\x02\x01\x12\x038\x17\x1a\n\x0c\n\x05\x04\0\x02\x02\x03\x12\
+    \x038\x1d\x1e\n;\n\x04\x04\0\x02\x03\x12\x03<\x08-\x1a.\x20Used\x20to\
     \x20return\x20a\x20value\n\x20PUT_VALUE,\x20GET_VALUE\n\n\x0c\n\x05\x04\
     \0\x02\x03\x04\x12\x03<\x08\x10\n\x0c\n\x05\x04\0\x02\x03\x06\x12\x03<\
     \x11!\n\x0c\n\x05\x04\0\x02\x03\x01\x12\x03<\"(\n\x0c\n\x05\x04\0\x02\
