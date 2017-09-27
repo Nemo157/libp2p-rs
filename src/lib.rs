@@ -19,6 +19,7 @@ extern crate protobuf;
 #[macro_use]
 mod macros;
 
+mod bitswap;
 mod dht;
 mod id;
 mod mux;

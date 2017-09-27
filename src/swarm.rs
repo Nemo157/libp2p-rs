@@ -21,6 +21,7 @@ use mux;
 use id::IdService;
 use service::Service;
 use dht::DhtService;
+use bitswap::BitswapService;
 
 struct State {
     logger: Logger,
@@ -83,6 +84,7 @@ impl Swarm {
             Rc::new(PingService::new()),
             Rc::new(IdService::new(swarm.clone())),
             Rc::new(DhtService::new(swarm.clone())),
+            Rc::new(BitswapService::new(swarm.clone())),
         ];
         Ok(swarm)
     }
