@@ -44,17 +44,19 @@ impl Clone for Swarm {
 }
 
 fn accept_stream(state: Rc<State>, stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
-    let mut negotiator = Negotiator::start(stream, false);
+    let logger = state.logger.new(o!{
+        "peer" => format!("{:#?}", peer.id()),
+        "stream_id" => stream.id()
+    });
+    let mut negotiator = Negotiator::start(logger.clone(), stream, false);
     for service in &*state.services.borrow() {
         let service = service.clone();
-        let peer_id = peer.id();
-        let logger = state.logger.new(o!(
-            "service" => service.name(),
-            "peer" => format!("{:#?}", peer_id),
-        ));
+        let logger = logger.new(o!{
+            "service" => service.name()
+        });
         negotiator = negotiator.negotiate(service.name(), move |parts| {
             info!(logger, "Accepted stream");
-            Box::new({ let logger = logger.clone(); service.accept(logger, parts) }.then(move |result| {
+            Box::new(service.accept(logger.clone(), parts).then(move |result| {
                 info!(logger, "Service done: {:?}", result);
                 future::ok(())
             })) as Box<Future<Item=(), Error=()>>
