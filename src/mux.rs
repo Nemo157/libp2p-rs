@@ -34,9 +34,10 @@ pub(crate) struct EventuallyMultiplexer {
 
 fn negotiate_stream(logger: Logger, conn: Transport, host: HostId, peer: PeerId) -> impl Future<Item=(PeerId, Stream), Error=io::Error> {
     info!(logger, "Connected transport, negotiating stream");
-    Negotiator::start(logger, conn, true)
+    Negotiator::start(logger.clone(), conn, true)
         .negotiate("/secio/1.0.0", move |parts: FramedParts<Transport>| {
-            secio::handshake(parts, host, peer)
+            let logger = logger.new(o!("security" => "/secio/1.0.0"));
+            secio::handshake(logger, parts, host, peer)
         })
         .finish()
         .flatten()
