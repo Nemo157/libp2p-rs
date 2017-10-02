@@ -3,12 +3,12 @@ use std::io;
 use std::rc::Rc;
 
 use slog::{b, log, kv, record, record_static};
-use slog::{error, info, o, Logger};
+use slog::{info, o, Logger};
 use maddr::MultiAddr;
 use multistream::Negotiator;
 use identity::{ HostId, PeerId };
 use tokio_core::reactor;
-use futures::{ future, Future, Poll };
+use futures::{Future, Poll};
 use tokio_io::codec::FramedParts;
 use futures::prelude::{async, await};
 

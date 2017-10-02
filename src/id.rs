@@ -2,7 +2,7 @@ use std::fmt;
 use std::io;
 
 use slog::{b, log, kv, record, record_static};
-use slog::{error, info, o, Logger};
+use slog::{error, info, Logger};
 use bytes::Bytes;
 use futures::{future, Future, Stream, Sink};
 use msgio;
