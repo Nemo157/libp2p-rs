@@ -41,7 +41,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
         "/ipfs/id/1.0.0"
     }
 
-    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=io::Error> + 'static> {
         let msg = {
             let mut msg = Identify::new();
             msg.set_protocolVersion("ipfs/0.1.0".to_owned());
@@ -66,7 +66,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for IdService {
                 info!(logger, "idservice msg: {:?}", msg);
                 future::ok(())
             })
-        }.map_err(move |err| error!(logger, "idservice error: {:?}", err)))
+        })
     }
 }
 

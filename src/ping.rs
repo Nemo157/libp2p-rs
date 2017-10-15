@@ -29,7 +29,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
         "/ipfs/ping/1.0.0"
     }
 
-    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=io::Error> + 'static> {
         Box::new(Framed::from_parts(parts, Codec)
             .into_future()
             .map_err(|(err, _)| err)
@@ -40,16 +40,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for PingService {
                     future::Either::B(future::err(io::Error::new(io::ErrorKind::Other, "Stream closed before receiving ping")))
                 }
             })
-            .then(move |res| match res {
-                Err(err) => {
-                    error!(logger, "Error during ping: {:?}", err);
-                    Err(())
-                }
-                Ok(()) => {
-                    info!(logger, "Ping successful");
-                    Ok(())
-                }
-            }))
+            .map(move |()| info!(logger, "Ping successful")))
     }
 }
 

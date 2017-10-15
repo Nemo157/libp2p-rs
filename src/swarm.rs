@@ -6,6 +6,7 @@ use std::rc::Rc;
 use slog::{b, log, kv, record, record_static};
 use slog::{trace, error, info, o, Logger};
 use futures::{ future, Future, Poll, Async, Stream };
+use futures::unsync::oneshot;
 use tokio_core::reactor;
 use identity::{ HostId, PeerId };
 use mplex;
@@ -33,8 +34,7 @@ struct State {
     listeners: RefCell<Vec<Box<Stream<Item=(transport::Transport, MultiAddr), Error=io::Error>>>>,
     accepting: RefCell<Vec<Box<Future<Item=(PeerId, mux::Stream, MultiAddr), Error=io::Error>>>>,
     services: RefCell<Vec<Rc<Service<mplex::Stream>>>>,
-    accepting_services: RefCell<Vec<Box<Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> + 'static>>>,
-    connected_services: RefCell<Vec<Box<Future<Item=(), Error=()> + 'static>>>,
+    connected_services: RefCell<Vec<oneshot::SpawnHandle<(), io::Error>>>,
 }
 
 pub struct Swarm(Rc<State>);
@@ -43,7 +43,7 @@ impl Clone for Swarm {
     fn clone(&self) -> Self { Swarm(self.0.clone()) }
 }
 
-fn accept_stream(state: Rc<State>, stream: mplex::Stream, peer: &Peer) -> impl Future<Item=Box<Future<Item=(), Error=()> + 'static>, Error=io::Error> {
+fn accept_stream(state: Rc<State>, stream: mplex::Stream, peer: &Peer) -> oneshot::SpawnHandle<(), io::Error> {
     let logger = state.logger.new(o!{
         "peer" => format!("{:#?}", peer.id()),
         "stream_id" => stream.id()
@@ -58,11 +58,15 @@ fn accept_stream(state: Rc<State>, stream: mplex::Stream, peer: &Peer) -> impl F
             info!(logger, "Accepted stream");
             Box::new(service.accept(logger.clone(), parts).then(move |result| {
                 info!(logger, "Service done: {:?}", result);
-                future::ok(())
-            })) as Box<Future<Item=(), Error=()>>
+                result
+            })) as Box<Future<Item=(), Error=io::Error>>
         });
     }
-    negotiator.finish()
+    let negotiation = negotiator.finish().map_err(move |err| {
+        error!(logger, "Error accepting stream");
+        err
+    });
+    oneshot::spawn(negotiation.flatten(), &state.event_loop)
 }
 
 impl Swarm {
@@ -79,7 +83,6 @@ impl Swarm {
             listeners: RefCell::new(listeners?),
             accepting: RefCell::new(Vec::new()),
             services: RefCell::new(Vec::new()),
-            accepting_services: RefCell::new(Vec::new()),
             connected_services: RefCell::new(Vec::new()),
         }));
         *swarm.0.services.borrow_mut() = vec![
@@ -136,7 +139,6 @@ impl Future for Swarm {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut accepting = self.0.accepting.borrow_mut();
-        let mut accepting_services = self.0.accepting_services.borrow_mut();
         let mut connected_services = self.0.connected_services.borrow_mut();
         let mut peers = self.0.peers.borrow_mut();
 
@@ -184,27 +186,7 @@ impl Future for Swarm {
         for peer in peers.iter_mut() {
             while let Async::Ready(Some(stream)) = peer.poll_accept()? {
                 trace!(self.0.logger, "Accepting new stream");
-                accepting_services.push(Box::new(accept_stream(self.0.clone(), stream, &peer)));
-            }
-        }
-
-        trace!(self.0.logger, "Checking accepting services");
-        {
-            let mut i = 0;
-            while i < accepting_services.len() {
-                match accepting_services[i].poll() {
-                    Ok(Async::Ready(service)) => {
-                        accepting_services.swap_remove(i);
-                        connected_services.push(service);
-                    }
-                    Ok(Async::NotReady) => {
-                        i += 1;
-                    }
-                    Err(err) => {
-                        error!(self.0.logger, "Error while accepting peers muxed stream: {:?}", err);
-                        accepting_services.swap_remove(i);
-                    }
-                }
+                connected_services.push(accept_stream(self.0.clone(), stream, &peer));
             }
         }
 
@@ -213,8 +195,12 @@ impl Future for Swarm {
             let mut i = 0;
             while i < connected_services.len() {
                 match connected_services[i].poll() {
-                    Ok(Async::Ready(())) | Err(()) => {
+                    Ok(Async::Ready(())) => {
                         trace!(self.0.logger, "Connected service done");
+                        connected_services.swap_remove(i);
+                    }
+                    Err(err) => {
+                        error!(self.0.logger, "Connected service failed: {}", err);
                         connected_services.swap_remove(i);
                     }
                     Ok(Async::NotReady) => {
@@ -240,7 +226,6 @@ impl fmt::Debug for Swarm {
                 .field("listeners", &self.0.listeners.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("accepting", &self.0.accepting.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("services", &self.0.services.borrow())
-                .field("accepting_services", &self.0.accepting_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("connected_services", &self.0.connected_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .finish()
         } else {
@@ -252,7 +237,6 @@ impl fmt::Debug for Swarm {
                 .field("listeners", &self.0.listeners.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("accepting", &self.0.accepting.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("services", &self.0.services)
-                .field("accepting_services", &self.0.accepting_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .field("connected_services", &self.0.connected_services.borrow().iter().map(|_| "<omitted>").collect::<Vec<_>>())
                 .finish()
         }

@@ -40,7 +40,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for BitswapService {
         "/ipfs/bitswap/1.1.0"
     }
 
-    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=()> + 'static> {
+    fn accept(&self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=io::Error> + 'static> {
         Box::new({
             let logger = logger.clone();
             setup_stream(parts)
@@ -48,7 +48,7 @@ impl<S: AsyncRead + AsyncWrite + 'static> Service<S> for BitswapService {
                     info!(logger, "bitswap msg: {:?}", msg);
                     future::ok(())
                 })
-        }.map_err(move |err| error!(logger, "bitswap error: {}, {:?}", err, err)))
+        })
     }
 }
 
