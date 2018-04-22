@@ -5,16 +5,13 @@ version = "0.1.0"
 
 [dependencies]
 bytes = "0.4.4"
+futures-await = "0.1.1"
 maddr = "0.2.1"
 protobuf = "1.4.1"
 slice_as_array = "1.1.0"
 slog = "2.0.12"
 tokio-core = "0.1.8"
 tokio-io = "0.1.2"
-
-[dependencies.futures-await]
-git = "https://github.com/Nemo157/futures-await"
-rev = "alternate-signatures"
 
 [dependencies.libp2p-identity]
 path = "../libp2p-identity-rs"

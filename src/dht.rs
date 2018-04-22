@@ -37,8 +37,8 @@ impl DhtService {
         DhtService { swarm }
     }
 
-    #[async]
-    fn accept<S: AsyncRead + AsyncWrite + 'static>(self, logger: Logger, parts: FramedParts<S>) -> Box<Future<Item=(), Error=io::Error> + 'static> {
+    #[async(boxed)]
+    fn accept<S: AsyncRead + AsyncWrite + 'static>(self, logger: Logger, parts: FramedParts<S>) -> io::Result<()> {
         let logger = logger.clone();
         let (mut tx, rx) = setup_stream(parts).split();
 

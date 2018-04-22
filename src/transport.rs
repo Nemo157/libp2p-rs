@@ -4,7 +4,7 @@ use maddr::MultiAddr;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_core::reactor;
 use futures::{future, Future, Poll, Stream};
-use futures::prelude::{async_block, stream_yield};
+use futures::prelude::{async_stream_block, stream_yield};
 
 use tcp;
 
@@ -24,7 +24,7 @@ pub fn connect(addr: &MultiAddr, event_loop: &reactor::Handle) -> impl Future<It
 pub fn listen(addr: &MultiAddr, event_loop: &reactor::Handle) -> io::Result<impl Stream<Item=(Transport, MultiAddr), Error=io::Error>> {
     if tcp::can_handle(addr) {
         let listener = tcp::listen(addr, event_loop)?;
-        Ok(async_block! {
+        Ok(async_stream_block! {
             #[async]
             for (transport, addr) in listener {
                 stream_yield!((Transport::Tcp(transport), addr));
