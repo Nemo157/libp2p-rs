@@ -170,8 +170,8 @@ impl State {
                 }
                 State::Connected(mut mux) => {
                     let res = mux.poll();
-                    if let Ok(Async::Ready(Some(_))) = res {
-                        info!(logger, "New incoming muxed stream");
+                    if let Ok(Async::Ready(Some(ref stream))) = res {
+                        info!(logger, "New incoming muxed stream"; "stream_id" => stream.id());
                     }
                     *self = if let Ok(Async::Ready(None)) = res {
                         State::Disconnected
