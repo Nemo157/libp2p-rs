@@ -6,6 +6,7 @@ extern crate bytes;
 pub extern crate libp2p_identity as identity;
 extern crate libp2p_secio as secio;
 extern crate maddr;
+extern crate mhash;
 extern crate multistream;
 extern crate msgio;
 extern crate futures_await as futures;
